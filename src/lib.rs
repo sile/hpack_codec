@@ -15,6 +15,7 @@ macro_rules! track_io {
     }
 }
 
+pub mod decoder; // TODO: private
 mod error;
 pub mod field; // TODO: private
 pub mod literal; // TODO: private
@@ -25,16 +26,25 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub struct Context {
     dynamic_table: DynamicTable,
 }
-
-/// https://tools.ietf.org/html/rfc7540#section-6.5.2
-pub const DEFAULT_MAX_TABLE_SIZE: usize = 4096;
+impl Context {
+    pub fn new(max_table_size: u16) -> Self {
+        Context { dynamic_table: DynamicTable::new(max_table_size) }
+    }
+}
 
 #[derive(Debug)]
 pub struct DynamicTable {
     entries: VecDeque<HeaderField<Vec<u8>>>,
-    max_table_size: usize,
+    max_table_size: u16,
 }
 impl DynamicTable {
+    pub fn new(max_table_size: u16) -> Self {
+        DynamicTable {
+            entries: VecDeque::new(),
+            max_table_size,
+        }
+    }
+
     /// https://tools.ietf.org/html/rfc7541#section-4.1
     pub fn table_size(&self) -> usize {
         self.entries
@@ -42,7 +52,7 @@ impl DynamicTable {
             .map(|h| h.name.len() + h.value.len() + 32)
             .sum()
     }
-    pub fn set_max_table_size(&mut self, size: usize) {
+    pub fn set_max_table_size(&mut self, size: u16) {
         // TODO: https://tools.ietf.org/html/rfc7541#section-4.3
         self.max_table_size = size;
     }
@@ -50,11 +60,6 @@ impl DynamicTable {
 
 #[derive(Debug)]
 pub struct Encoder {
-    context: Context,
-}
-
-#[derive(Debug)]
-pub struct Decoder {
     context: Context,
 }
 

@@ -32,6 +32,10 @@ pub struct Reader<'a> {
     offset: usize,
 }
 impl<'a> Reader<'a> {
+    pub fn eos(&self) -> bool {
+        debug_assert!(self.offset <= self.octets.len());
+        self.offset == self.octets.len()
+    }
     pub fn peek_u8(&mut self) -> Result<u8> {
         let value = track_io!(self.read_u8())?;
         self.unread();
