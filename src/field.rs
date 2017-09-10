@@ -13,7 +13,7 @@ impl Index {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiteralFieldForm {
     WithIndexing,
     WithoutIndexing,
@@ -32,6 +32,9 @@ pub struct Reader<'a> {
     offset: usize,
 }
 impl<'a> Reader<'a> {
+    pub fn new(octets: &'a [u8]) -> Self {
+        Reader { octets, offset: 0 }
+    }
     pub fn eos(&self) -> bool {
         debug_assert!(self.offset <= self.octets.len());
         self.offset == self.octets.len()
@@ -192,6 +195,7 @@ impl<'a> LiteralHeaderField<&'a [u8], &'a [u8]> {
     ) -> Result<(FieldName<&'a [u8]>, LiteralFieldForm)> {
         if first_octet >> 6 == 0b01 {
             let name = if first_octet & 0b11_1111 == 0 {
+                reader.consume(1);
                 let name = track!(HpackString::decode(reader))?;
                 FieldName::Name(name)
             } else {
@@ -201,6 +205,7 @@ impl<'a> LiteralHeaderField<&'a [u8], &'a [u8]> {
             Ok((name, LiteralFieldForm::WithIndexing))
         } else if first_octet == 0b0001_0000 {
             let name = if first_octet & 0b1111 == 0 {
+                reader.consume(1);
                 let name = track!(HpackString::decode(reader))?;
                 FieldName::Name(name)
             } else {
@@ -210,6 +215,7 @@ impl<'a> LiteralHeaderField<&'a [u8], &'a [u8]> {
             Ok((name, LiteralFieldForm::NeverIndexed))
         } else {
             let name = if first_octet & 0b1111 == 0 {
+                reader.consume(1);
                 let name = track!(HpackString::decode(reader))?;
                 FieldName::Name(name)
             } else {
@@ -217,6 +223,151 @@ impl<'a> LiteralHeaderField<&'a [u8], &'a [u8]> {
                 FieldName::Index(Index(index))
             };
             Ok((name, LiteralFieldForm::WithoutIndexing))
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use literal::HpackString;
+    use super::*;
+
+    #[test]
+    /// https://tools.ietf.org/html/rfc7541#appendix-C.2.1
+    fn literal_header_field_with_indexing() {
+        let field = HeaderField::Literal(LiteralHeaderField {
+            form: LiteralFieldForm::WithIndexing,
+            name: FieldName::Name(HpackString::new_raw(b"custom-key")),
+            value: HpackString::new_raw(b"custom-header"),
+        });
+
+        // encode
+        let mut buf = Vec::new();
+        track_try_unwrap!(field.encode(&mut buf));
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        {
+            assert_eq!(
+                buf,
+                [
+                    0x40, 0x0a, 0x63, 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x2d,
+                    0x6b, 0x65, 0x79, 0x0d, 0x63, 0x75, 0x73, 0x74, 0x6f,
+                    0x6d, 0x2d, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
+                ]
+            );
+        }
+
+        // decode
+        let mut reader = Reader::new(&buf[..]);
+        let field = track_try_unwrap!(HeaderField::decode(&mut reader));
+        if let HeaderField::Literal(field) = field {
+            assert_eq!(field.form, LiteralFieldForm::WithIndexing);
+            if let FieldName::Name(ref name) = field.name {
+                assert_eq!(name.octets(), b"custom-key");
+            } else {
+                panic!("{:?}", field.name);
+            }
+            assert_eq!(field.value.octets(), b"custom-header");
+        } else {
+            panic!("{:?}", field);
+        }
+    }
+
+    #[test]
+    /// https://tools.ietf.org/html/rfc7541#appendix-C.2.2
+    fn literal_header_field_without_indexing() {
+        let field = HeaderField::Literal::<Vec<u8>, _>(LiteralHeaderField {
+            form: LiteralFieldForm::WithoutIndexing,
+            name: FieldName::Index(Index(4)),
+            value: HpackString::new_raw(b"/sample/path"),
+        });
+
+        // encode
+        let mut buf = Vec::new();
+        track_try_unwrap!(field.encode(&mut buf));
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        {
+            assert_eq!(
+                buf,
+                [
+                    0x04, 0x0c, 0x2f, 0x73, 0x61, 0x6d, 0x70,
+                    0x6c, 0x65, 0x2f, 0x70, 0x61, 0x74, 0x68
+                ]
+            );
+        }
+
+        // decode
+        let mut reader = Reader::new(&buf[..]);
+        let field = track_try_unwrap!(HeaderField::decode(&mut reader));
+        if let HeaderField::Literal(field) = field {
+            assert_eq!(field.form, LiteralFieldForm::WithoutIndexing);
+            if let FieldName::Index(index) = field.name {
+                assert_eq!(index.as_u16(), 4);
+            } else {
+                panic!("{:?}", field.name);
+            }
+            assert_eq!(field.value.octets(), b"/sample/path");
+        } else {
+            panic!("{:?}", field);
+        }
+    }
+
+    #[test]
+    /// https://tools.ietf.org/html/rfc7541#appendix-C.2.3
+    fn literal_header_field_never_indexed() {
+        let field = HeaderField::Literal(LiteralHeaderField {
+            form: LiteralFieldForm::NeverIndexed,
+            name: FieldName::Name(HpackString::new_raw(b"password")),
+            value: HpackString::new_raw(b"secret"),
+        });
+
+        // encode
+        let mut buf = Vec::new();
+        track_try_unwrap!(field.encode(&mut buf));
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        {
+            assert_eq!(
+                buf,
+                [
+                    0x10, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72,
+                    0x64, 0x06, 0x73, 0x65, 0x63, 0x72, 0x65, 0x74
+                ]
+            );
+        }
+
+        // decode
+        let mut reader = Reader::new(&buf[..]);
+        let field = track_try_unwrap!(HeaderField::decode(&mut reader));
+        if let HeaderField::Literal(field) = field {
+            assert_eq!(field.form, LiteralFieldForm::NeverIndexed);
+            if let FieldName::Name(ref name) = field.name {
+                assert_eq!(name.octets(), b"password");
+            } else {
+                panic!("{:?}", field.name);
+            }
+            assert_eq!(field.value.octets(), b"secret");
+        } else {
+            panic!("{:?}", field);
+        }
+    }
+
+    #[test]
+    /// https://tools.ietf.org/html/rfc7541#appendix-C.2.4
+    fn indexed_header_field() {
+        let field =
+            HeaderField::Indexed::<Vec<u8>, Vec<u8>>(IndexedHeaderField { index: Index(2) });
+
+        // encode
+        let mut buf = Vec::new();
+        track_try_unwrap!(field.encode(&mut buf));
+        assert_eq!(buf, [0x82]);
+
+        // decode
+        let mut reader = Reader::new(&buf[..]);
+        let field = track_try_unwrap!(HeaderField::decode(&mut reader));
+        if let HeaderField::Indexed(field) = field {
+            assert_eq!(field.index.as_u16(), 2);
+        } else {
+            panic!("{:?}", field);
         }
     }
 }

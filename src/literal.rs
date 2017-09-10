@@ -69,6 +69,16 @@ impl<B> HpackString<B>
 where
     B: AsRef<[u8]>,
 {
+    #[cfg(test)]
+    pub fn octets(&self) -> &[u8] {
+        self.octets.as_ref()
+    }
+    pub fn new_raw(octets: B) -> Self {
+        HpackString {
+            encoding: Encoding::Raw,
+            octets,
+        }
+    }
     pub fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
         debug_assert!(self.octets.as_ref().len() <= u16::MAX as usize);
         track!(encode_u16(
