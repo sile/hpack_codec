@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use std::u16;
 use byteorder::{WriteBytesExt, ReadBytesExt};
 
 use {Result, ErrorKind};
@@ -59,6 +60,33 @@ pub fn decode_u16<R: Read>(mut reader: R, prefix_bits: u8) -> Result<(u8, u16)> 
         }
     }
     Ok((prepended_value, value))
+}
+
+pub fn encode_raw_octets<W: Write>(mut writer: W, octets: &[u8]) -> Result<()> {
+    track_assert!(
+        octets.len() <= u16::MAX as usize,
+        ErrorKind::InvalidInput,
+        "Too long octets: length={}",
+        octets.len()
+    );
+    track!(encode_u16(&mut writer, 0, 7, octets.len() as u16))?;
+    track_io!(writer.write_all(octets))?;
+    Ok(())
+}
+
+pub fn encode_huffman_octets<W: Write>(mut _writer: W, _octets: &[u8]) -> Result<()> {
+    unimplemented!()
+}
+
+pub fn decode_octets<R: Read>(mut reader: R) -> Result<Vec<u8>> {
+    let (is_huffman_encoded, data_len) = track!(decode_u16(&mut reader, 1))?;
+    if is_huffman_encoded == 1 {
+        unimplemented!()
+    } else {
+        let mut data = vec![0; data_len as usize];
+        track_io!(reader.read_exact(&mut data[..]))?;
+        Ok(data)
+    }
 }
 
 #[cfg(test)]
