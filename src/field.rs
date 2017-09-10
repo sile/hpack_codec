@@ -8,6 +8,10 @@ use literal::{self, HpackString};
 #[derive(Debug, Clone, Copy)]
 pub struct Index(u16);
 impl Index {
+    pub fn new(index: u16) -> Result<Self> {
+        track_assert_ne!(index, 0, ErrorKind::InvalidInput);
+        Ok(Index(index))
+    }
     pub fn as_u16(&self) -> u16 {
         self.0
     }
@@ -75,7 +79,7 @@ impl<'a> Read for Reader<'a> {
 }
 
 #[derive(Debug)]
-pub enum HeaderField<N, V> {
+pub enum HeaderField<N, V = N> {
     Indexed(IndexedHeaderField),
     Literal(LiteralHeaderField<N, V>),
     Update(DynamicTableSizeUpdate), // TODO
@@ -112,7 +116,7 @@ impl<'a> HeaderField<&'a [u8], &'a [u8]> {
 
 #[derive(Debug)]
 pub struct DynamicTableSizeUpdate {
-    max_size: u16,
+    pub max_size: u16,
 }
 impl DynamicTableSizeUpdate {
     pub fn encode<W: Write>(&self, writer: W) -> Result<()> {
@@ -126,7 +130,7 @@ impl DynamicTableSizeUpdate {
 
 #[derive(Debug)]
 pub struct IndexedHeaderField {
-    index: Index,
+    pub index: Index,
 }
 impl IndexedHeaderField {
     pub fn encode<W: Write>(&self, writer: W) -> Result<()> {
@@ -140,9 +144,9 @@ impl IndexedHeaderField {
 
 #[derive(Debug)]
 pub struct LiteralHeaderField<N, V> {
-    name: FieldName<N>,
-    value: HpackString<V>,
-    form: LiteralFieldForm,
+    pub name: FieldName<N>,
+    pub value: HpackString<V>,
+    pub form: LiteralFieldForm,
 }
 impl<N, V> LiteralHeaderField<N, V>
 where

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::u16;
 use byteorder::{WriteBytesExt, ReadBytesExt};
@@ -101,6 +102,13 @@ impl<'a> HpackString<&'a [u8]> {
             Encoding::Huffman
         };
         Ok(HpackString { encoding, octets })
+    }
+    pub fn to_cow_str(&self) -> Result<Cow<'a, [u8]>> {
+        if let Encoding::Raw = self.encoding {
+            Ok(Cow::Borrowed(self.octets))
+        } else {
+            unimplemented!()
+        }
     }
 }
 

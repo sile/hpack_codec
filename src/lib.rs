@@ -6,6 +6,8 @@ use std::collections::VecDeque;
 
 pub use error::{Error, ErrorKind};
 
+use field::Index;
+
 macro_rules! track_io {
     ($e:expr) => {
         $e.map_err(|e| {
@@ -30,19 +32,91 @@ impl Context {
     pub fn new(max_table_size: u16) -> Self {
         Context { dynamic_table: DynamicTable::new(max_table_size) }
     }
+    pub fn find_entry(&self, index: Index) -> Result<Entry<&[u8]>> {
+        debug_assert_ne!(index.as_u16(), 0);
+        let index = index.as_u16() as usize - 1;
+        if index < 61 {
+            Ok(STATIC_TABLE[index].clone())
+        } else {
+            track!(self.dynamic_table.find_entry(index - 61))
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct DynamicTable {
-    entries: VecDeque<HeaderField<Vec<u8>>>,
+    entries: VecDeque<Entry<Vec<u8>>>,
+    entries_bytes: usize,
     max_table_size: u16,
+    table_size_limit: u16,
 }
 impl DynamicTable {
     pub fn new(max_table_size: u16) -> Self {
         DynamicTable {
             entries: VecDeque::new(),
+            entries_bytes: 0,
             max_table_size,
+            table_size_limit: max_table_size,
         }
+    }
+
+    pub fn last_entry(&self) -> Option<Entry<&[u8]>> {
+        self.entries.back().map(|e| {
+            Entry {
+                name: &e.name[..],
+                value: &e.value[..],
+            }
+        })
+    }
+    pub fn size(&self) -> usize {
+        self.entries_bytes
+    }
+    pub fn set_size_limit(&mut self, size: u16) {
+        self.table_size_limit = size;
+        if self.table_size_limit < self.max_table_size {
+            self.set_max_size(size).expect("Never fails");
+        }
+    }
+    pub fn set_max_size(&mut self, size: u16) -> Result<()> {
+        track_assert!(
+            size <= self.table_size_limit,
+            ErrorKind::InvalidInput,
+            "size={}, limit={}",
+            size,
+            self.table_size_limit
+        );
+        self.max_table_size = size;
+
+        while (self.max_table_size as usize) < self.entries_bytes {
+            let last = self.entries.pop_front();
+            self.entries_bytes -= last.as_ref().unwrap().size();
+        }
+
+        Ok(())
+    }
+    pub fn push_entry(&mut self, name: Vec<u8>, value: Vec<u8>) -> Option<Entry<Vec<u8>>> {
+        let entry = Entry { name, value };
+        self.entries_bytes += entry.size();
+        self.entries.push_back(entry);
+        let mut last = None;
+        while (self.max_table_size as usize) < self.entries_bytes {
+            last = self.entries.pop_front();
+            self.entries_bytes -= last.as_ref().unwrap().size();
+        }
+        if self.entries.is_empty() { last } else { None }
+    }
+
+    pub fn find_entry(&self, index: usize) -> Result<Entry<&[u8]>> {
+        let entry = track_assert_some!(
+            self.entries.get(index),
+            ErrorKind::InvalidInput,
+            "Unknown index: {}",
+            index
+        );
+        Ok(Entry {
+            name: &entry.name,
+            value: &entry.value,
+        })
     }
 
     /// https://tools.ietf.org/html/rfc7541#section-4.1
@@ -63,22 +137,27 @@ pub struct Encoder {
     context: Context,
 }
 
-#[derive(Debug)]
-pub struct HeaderField<B> {
+#[derive(Debug, Clone)]
+pub struct Entry<B> {
     pub name: B,
     pub value: B,
+}
+impl<B: AsRef<[u8]>> Entry<B> {
+    pub fn size(&self) -> usize {
+        self.name.as_ref().len() + self.value.as_ref().len() + 32
+    }
 }
 
 macro_rules! field {
     ($name:expr, $value: expr) => {
-        HeaderField{ name: $name, value: $value }
+        Entry{ name: $name, value: $value }
     };
     ($name:expr) => {
-        HeaderField{ name: $name, value: b"" }
+        Entry{ name: $name, value: b"" }
     }
 }
 
-pub const STATIC_TABLE: &[HeaderField<&[u8]>; 61] = &[
+pub const STATIC_TABLE: &[Entry<&[u8]>; 61] = &[
     field!(b":authority"),
     field!(b":method", b"GET"),
     field!(b":method", b"POST"),
