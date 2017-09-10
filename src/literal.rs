@@ -3,15 +3,7 @@ use std::u16;
 use byteorder::{WriteBytesExt, ReadBytesExt};
 
 use {Result, ErrorKind};
-
-macro_rules! track_io {
-    ($e:expr) => {
-        $e.map_err(|e| {
-            use ::trackable::error::ErrorKindExt;
-            ::ErrorKind::Io.cause(e)
-        })
-    }
-}
+use field::Reader;
 
 pub fn encode_u16<W: Write>(
     mut writer: W,
@@ -62,30 +54,43 @@ pub fn decode_u16<R: Read>(mut reader: R, prefix_bits: u8) -> Result<(u8, u16)> 
     Ok((prepended_value, value))
 }
 
-pub fn encode_raw_octets<W: Write>(mut writer: W, octets: &[u8]) -> Result<()> {
-    track_assert!(
-        octets.len() <= u16::MAX as usize,
-        ErrorKind::InvalidInput,
-        "Too long octets: length={}",
-        octets.len()
-    );
-    track!(encode_u16(&mut writer, 0, 7, octets.len() as u16))?;
-    track_io!(writer.write_all(octets))?;
-    Ok(())
+#[derive(Debug, Clone, Copy)]
+pub enum Encoding {
+    Raw = 0,
+    Huffman = 1,
 }
 
-pub fn encode_huffman_octets<W: Write>(mut _writer: W, _octets: &[u8]) -> Result<()> {
-    unimplemented!()
+#[derive(Debug)]
+pub struct HpackString<B> {
+    encoding: Encoding,
+    octets: B,
 }
-
-pub fn decode_octets<R: Read>(mut reader: R) -> Result<Vec<u8>> {
-    let (is_huffman_encoded, data_len) = track!(decode_u16(&mut reader, 1))?;
-    if is_huffman_encoded == 1 {
-        unimplemented!()
-    } else {
-        let mut data = vec![0; data_len as usize];
-        track_io!(reader.read_exact(&mut data[..]))?;
-        Ok(data)
+impl<B> HpackString<B>
+where
+    B: AsRef<[u8]>,
+{
+    pub fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
+        debug_assert!(self.octets.as_ref().len() <= u16::MAX as usize);
+        track!(encode_u16(
+            &mut writer,
+            self.encoding as u8,
+            7,
+            self.octets.as_ref().len() as u16,
+        ))?;
+        track_io!(writer.write_all(self.octets.as_ref()))?;
+        Ok(())
+    }
+}
+impl<'a> HpackString<&'a [u8]> {
+    pub fn decode(mut reader: &mut Reader<'a>) -> Result<Self> {
+        let (encoding, octets_len) = track!(decode_u16(&mut reader, 7))?;
+        let octets = track!(reader.read_slice(octets_len as usize))?;
+        let encoding = if encoding == 0 {
+            Encoding::Raw
+        } else {
+            Encoding::Huffman
+        };
+        Ok(HpackString { encoding, octets })
     }
 }
 

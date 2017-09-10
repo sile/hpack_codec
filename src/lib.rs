@@ -6,7 +6,17 @@ use std::collections::VecDeque;
 
 pub use error::{Error, ErrorKind};
 
+macro_rules! track_io {
+    ($e:expr) => {
+        $e.map_err(|e| {
+            use ::trackable::error::ErrorKindExt;
+            ::ErrorKind::Io.cause(e)
+        })
+    }
+}
+
 mod error;
+pub mod field; // TODO: private
 pub mod literal; // TODO: private
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -126,52 +136,3 @@ pub const STATIC_TABLE: &[HeaderField<&[u8]>; 61] = &[
     field!(b"via"),
     field!(b"www-authenticate"),
 ];
-
-/// https://tools.ietf.org/html/rfc7541#section-5.1
-#[derive(Debug)]
-pub struct IntegerOctets {
-    prefix_bits: u8,
-    octets: [u8; 10],
-    octets_len: u8,
-}
-impl IntegerOctets {
-    pub fn from_u64(prefix_bits: u8, value: u64) -> Result<Self> {
-        track_assert!(
-            1 <= prefix_bits && prefix_bits <= 8,
-            ErrorKind::InvalidInput,
-            "prefix_bits={}, value={}",
-            prefix_bits,
-            value
-        );
-
-        let prefix_value = (2 << prefix_bits) - 1;
-        let mut octets = [0; 10];
-        let octets_len = if value < prefix_value {
-            octets[0] = value as u8;
-            1
-        } else {
-            octets[0] = prefix_value as u8;
-            let mut value = value - prefix_value;
-            let mut i = 1;
-            while value >= 128 {
-                octets[i] = (value % 128 + 128) as u8;
-                value /= 128;
-                i += 1;
-            }
-            octets[i] = value as u8;
-            i + 1
-        } as u8;
-        Ok(IntegerOctets {
-            prefix_bits,
-            octets,
-            octets_len,
-        })
-    }
-    pub fn to_u64(&self) -> u64 {
-        panic!()
-    }
-}
-
-/// https://tools.ietf.org/html/rfc7541#section-5.2
-#[derive(Debug)]
-pub struct Str {}
