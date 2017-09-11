@@ -60,8 +60,8 @@ impl DynamicTable {
         }
     }
 
-    pub fn last_entry(&self) -> Option<Entry<&[u8]>> {
-        self.entries.back().map(|e| {
+    pub fn first_entry(&self) -> Option<Entry<&[u8]>> {
+        self.entries.front().map(|e| {
             Entry {
                 name: &e.name[..],
                 value: &e.value[..],
@@ -88,7 +88,7 @@ impl DynamicTable {
         self.max_table_size = size;
 
         while (self.max_table_size as usize) < self.entries_bytes {
-            let last = self.entries.pop_front();
+            let last = self.entries.pop_back();
             self.entries_bytes -= last.as_ref().unwrap().size();
         }
 
@@ -97,10 +97,10 @@ impl DynamicTable {
     pub fn push_entry(&mut self, name: Vec<u8>, value: Vec<u8>) -> Option<Entry<Vec<u8>>> {
         let entry = Entry { name, value };
         self.entries_bytes += entry.size();
-        self.entries.push_back(entry);
+        self.entries.push_front(entry);
         let mut last = None;
         while (self.max_table_size as usize) < self.entries_bytes {
-            last = self.entries.pop_front();
+            last = self.entries.pop_back();
             self.entries_bytes -= last.as_ref().unwrap().size();
         }
         if self.entries.is_empty() { last } else { None }

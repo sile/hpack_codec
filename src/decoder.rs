@@ -16,10 +16,14 @@ pub struct Decoder {
     context: Context,
 }
 impl Decoder {
+    pub fn table_size(&self) -> usize {
+        self.context.dynamic_table.size()
+    }
+
     pub fn new(max_dynamic_table_size: u16) -> Self {
         Decoder { context: Context::new(max_dynamic_table_size) }
     }
-    pub fn decode<'a: 'b, 'b>(&'a mut self, reader: &mut Reader<'b>) -> Result<HeaderField<'b>> {
+    pub fn decode<'a, 'b: 'a>(&'a mut self, reader: &mut Reader<'b>) -> Result<HeaderField<'a>> {
         loop {
             let field = track!(field::HeaderField::decode(reader))?;
             match field {
@@ -59,7 +63,7 @@ impl Decoder {
                     value: Cow::Owned(entry.value),
                 })
             } else {
-                let entry = self.context.dynamic_table.last_entry().expect(
+                let entry = self.context.dynamic_table.first_entry().expect(
                     "Never fails",
                 );
                 Ok(HeaderField {
