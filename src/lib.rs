@@ -19,6 +19,7 @@ macro_rules! track_io {
 
 pub mod decoder; // TODO: private
 mod error;
+pub mod huffman; // TODO: private
 pub mod field; // TODO: private
 pub mod literal; // TODO: private
 

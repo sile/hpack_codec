@@ -5,6 +5,7 @@ use byteorder::{WriteBytesExt, ReadBytesExt};
 
 use {Result, ErrorKind};
 use field::Reader;
+use huffman;
 
 pub fn encode_u16<W: Write>(
     mut writer: W,
@@ -107,7 +108,7 @@ impl<'a> HpackString<&'a [u8]> {
         if let Encoding::Raw = self.encoding {
             Ok(Cow::Borrowed(self.octets))
         } else {
-            unimplemented!()
+            track!(huffman::decode(&self.octets)).map(Cow::Owned)
         }
     }
 }
