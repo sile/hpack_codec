@@ -214,11 +214,11 @@ fn response_examples_without_huffman_coding() {
 }
 
 #[test]
-/// https://tools.ietf.org/html/rfc7541#appendix-C.5
+/// https://tools.ietf.org/html/rfc7541#appendix-C.6
 fn response_examples_with_huffman_coding() {
     let mut decoder = Decoder::new(256);
 
-    // C.5.1. First Response
+    // C.6.1. First Response
     let encoded_data;
     #[cfg_attr(rustfmt, rustfmt_skip)]
     {
@@ -239,7 +239,7 @@ fn response_examples_with_huffman_coding() {
     assert!(reader.eos());
     assert_eq!(decoder.table_size(), 222);
 
-    // C.5.2. Second Response
+    // C.6.2. Second Response
     let encoded_data;
     #[cfg_attr(rustfmt, rustfmt_skip)]
     {
@@ -255,7 +255,7 @@ fn response_examples_with_huffman_coding() {
     assert!(reader.eos());
     assert_eq!(decoder.table_size(), 222);
 
-    // C.5.3. Third Response
+    // C.6.3. Third Response
     let encoded_data;
     #[cfg_attr(rustfmt, rustfmt_skip)]
     {

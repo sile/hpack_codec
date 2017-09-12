@@ -1,13 +1,62 @@
+use std::borrow::Cow;
 use std::cmp;
 use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use trackable::error::Failed;
 
-use Result;
-use literal::{self, HpackString};
+use {Result, Name};
+use literal::{self, HpackString, Encoding};
+
+#[derive(Debug)]
+pub struct LiteralHeaderFieldBuilder {
+    form: LiteralFieldForm,
+    name_encoding: Encoding,
+    value_encoding: Encoding,
+}
+impl LiteralHeaderFieldBuilder {
+    pub fn with_indexing() -> Self {
+        LiteralHeaderFieldBuilder {
+            form: LiteralFieldForm::WithIndexing,
+            name_encoding: Encoding::Raw,
+            value_encoding: Encoding::Raw,
+        }
+    }
+    pub fn without_indexing() -> Self {
+        LiteralHeaderFieldBuilder {
+            form: LiteralFieldForm::WithoutIndexing,
+            name_encoding: Encoding::Raw,
+            value_encoding: Encoding::Raw,
+        }
+    }
+    pub fn never_indexed() -> Self {
+        LiteralHeaderFieldBuilder {
+            form: LiteralFieldForm::NeverIndexed,
+            name_encoding: Encoding::Raw,
+            value_encoding: Encoding::Raw,
+        }
+    }
+    pub fn name_encoding(&mut self, encoding: Encoding) -> &mut Self {
+        self.name_encoding = encoding;
+        self
+    }
+    pub fn value_encoding(&mut self, encoding: Encoding) -> &mut Self {
+        self.value_encoding = encoding;
+        self
+    }
+    pub fn finish<'a, 'b>(
+        &self,
+        name: Name<'a>,
+        value: &'b [u8],
+    ) -> LiteralHeaderField<Cow<'a, [u8]>, Cow<'b, [u8]>> {
+        let name = name.to_field_name(self.name_encoding);
+        let value = HpackString::new(value, self.value_encoding);
+        let form = self.form;
+        LiteralHeaderField { form, name, value }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
-pub struct Index(u16);
+pub struct Index(pub u16);
 impl Index {
     pub fn new(index: u16) -> Result<Self> {
         track_assert_ne!(index, 0, Failed);

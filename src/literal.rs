@@ -82,6 +82,19 @@ where
             octets,
         }
     }
+    pub fn new_huffman(octets: B) -> HpackString<Vec<u8>> {
+        let encoded = huffman::encode(octets.as_ref());
+        HpackString {
+            encoding: Encoding::Huffman,
+            octets: encoded,
+        }
+    }
+    pub fn as_ref(&self) -> HpackString<&[u8]> {
+        HpackString {
+            encoding: self.encoding,
+            octets: self.octets.as_ref(),
+        }
+    }
     pub fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
         debug_assert!(self.octets.as_ref().len() <= u16::MAX as usize);
         track!(encode_u16(
@@ -93,8 +106,22 @@ where
         track_io!(writer.write_all(self.octets.as_ref()))?;
         Ok(())
     }
+    pub fn to_vec(&self) -> Result<Vec<u8>> {
+        if let Encoding::Raw = self.encoding {
+            Ok(self.octets.as_ref().to_owned())
+        } else {
+            track!(huffman::decode(self.octets.as_ref()))
+        }
+    }
 }
 impl<'a> HpackString<&'a [u8]> {
+    pub fn new(octets: &'a [u8], encoding: Encoding) -> HpackString<Cow<'a, [u8]>> {
+        let octets = match encoding {
+            Encoding::Raw => Cow::Borrowed(octets),
+            Encoding::Huffman => Cow::Owned(huffman::encode(octets)),
+        };
+        HpackString { encoding, octets }
+    }
     pub fn decode(mut reader: &mut Reader<'a>) -> Result<Self> {
         let (encoding, octets_len) = track!(decode_u16(&mut reader, 7))?;
         let octets = track!(reader.read_slice(octets_len as usize))?;

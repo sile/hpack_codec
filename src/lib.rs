@@ -5,6 +5,9 @@ extern crate trackable;
 use std::collections::VecDeque;
 use trackable::error::Failed;
 
+pub use encoder::{Encoder, HeaderBlockEncoder};
+pub use name::Name;
+
 use field::Index;
 
 macro_rules! track_io {
@@ -17,9 +20,11 @@ macro_rules! track_io {
 }
 
 pub mod decoder; // TODO: private
+mod encoder;
 pub mod huffman; // TODO: private
 pub mod field; // TODO: private
 pub mod literal; // TODO: private
+mod name;
 
 pub type Error = trackable::error::TrackableError<trackable::error::Failed>;
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -32,6 +37,22 @@ impl Context {
     pub fn new(max_table_size: u16) -> Self {
         Context { dynamic_table: DynamicTable::new(max_table_size) }
     }
+    pub fn dynamic_table(&self) -> &DynamicTable {
+        &self.dynamic_table
+    }
+    pub fn validate_entry_index(&self, index: u16) -> Result<()> {
+        let max_index = STATIC_TABLE.len() + self.dynamic_table.entries.len();
+        track_assert!(
+            index as usize <= max_index,
+            Failed,
+            "Too large index: {} (max={})",
+            index,
+            max_index
+        );
+        track_assert_ne!(index, 0, Failed);
+        Ok(())
+    }
+
     pub fn find_entry(&self, index: Index) -> Result<Entry<&[u8]>> {
         debug_assert_ne!(index.as_u16(), 0);
         let index = index.as_u16() as usize - 1;
@@ -45,9 +66,9 @@ impl Context {
 
 #[derive(Debug)]
 pub struct DynamicTable {
-    entries: VecDeque<Entry<Vec<u8>>>,
+    pub entries: VecDeque<Entry<Vec<u8>>>, // TODO
     entries_bytes: usize,
-    max_table_size: u16,
+    pub max_table_size: u16, // TODO
     table_size_limit: u16,
 }
 impl DynamicTable {
@@ -114,22 +135,17 @@ impl DynamicTable {
         })
     }
 
-    /// https://tools.ietf.org/html/rfc7541#section-4.1
-    pub fn table_size(&self) -> usize {
-        self.entries
-            .iter()
-            .map(|h| h.name.len() + h.value.len() + 32)
-            .sum()
-    }
-    pub fn set_max_table_size(&mut self, size: u16) {
-        // TODO: https://tools.ietf.org/html/rfc7541#section-4.3
-        self.max_table_size = size;
-    }
-}
-
-#[derive(Debug)]
-pub struct Encoder {
-    context: Context,
+    // /// https://tools.ietf.org/html/rfc7541#section-4.1
+    // pub fn table_size(&self) -> usize {
+    //     self.entries
+    //         .iter()
+    //         .map(|h| h.name.len() + h.value.len() + 32)
+    //         .sum()
+    // }
+    // pub fn set_max_table_size(&mut self, size: u16) {
+    //     // TODO: https://tools.ietf.org/html/rfc7541#section-4.3
+    //     self.max_table_size = size;
+    // }
 }
 
 #[derive(Debug, Clone)]
