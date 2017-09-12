@@ -16,10 +16,9 @@ pub struct Decoder {
     context: Context,
 }
 impl Decoder {
-    pub fn table_size(&self) -> usize {
-        self.context.dynamic_table.size()
+    pub fn context(&self) -> &Context {
+        &self.context
     }
-
     pub fn new(max_dynamic_table_size: u16) -> Self {
         Decoder { context: Context::new(max_dynamic_table_size) }
     }
@@ -30,7 +29,7 @@ impl Decoder {
                 field::HeaderField::Indexed(f) => return track!(self.handle_indexed_field(f)),
                 field::HeaderField::Literal(f) => return track!(self.handle_literal_field(f)),
                 field::HeaderField::Update(f) => {
-                    track!(self.context.dynamic_table.set_max_size(f.max_size))?;
+                    track!(self.context.dynamic_table.set_size_soft_limit(f.max_size))?;
                 }
             }
         }
@@ -63,9 +62,7 @@ impl Decoder {
                     value: Cow::Owned(entry.value),
                 })
             } else {
-                let entry = self.context.dynamic_table.first_entry().expect(
-                    "Never fails",
-                );
+                let entry = self.context.dynamic_table.entries()[0].as_ref();
                 Ok(HeaderField {
                     name: Cow::Borrowed(entry.name),
                     value: Cow::Borrowed(entry.value),
@@ -109,11 +106,14 @@ mod test {
             assert_eq!(field.name.as_ref(), b"custom-key");
             assert_eq!(field.value.as_ref(), b"custom-header");
         }
-        assert_eq!(decoder.context.dynamic_table.entries.len(), 1);
+        assert_eq!(decoder.context.dynamic_table.entries().len(), 1);
         assert_eq!(decoder.context.dynamic_table.size(), 55);
-        assert_eq!(decoder.context.dynamic_table.entries[0].name, b"custom-key");
         assert_eq!(
-            decoder.context.dynamic_table.entries[0].value,
+            decoder.context.dynamic_table.entries()[0].name,
+            b"custom-key"
+        );
+        assert_eq!(
+            decoder.context.dynamic_table.entries()[0].value,
             b"custom-header"
         );
     }
@@ -137,7 +137,7 @@ mod test {
             assert_eq!(field.name.as_ref(), b":path");
             assert_eq!(field.value.as_ref(), b"/sample/path");
         }
-        assert_eq!(decoder.context.dynamic_table.entries.len(), 0);
+        assert_eq!(decoder.context.dynamic_table.entries().len(), 0);
     }
 
     #[test]
@@ -159,7 +159,7 @@ mod test {
             assert_eq!(field.name.as_ref(), b"password");
             assert_eq!(field.value.as_ref(), b"secret");
         }
-        assert_eq!(decoder.context.dynamic_table.entries.len(), 0);
+        assert_eq!(decoder.context.dynamic_table.entries().len(), 0);
     }
 
     #[test]
@@ -174,6 +174,6 @@ mod test {
             assert_eq!(field.name.as_ref(), b":method");
             assert_eq!(field.value.as_ref(), b"GET");
         }
-        assert!(decoder.context.dynamic_table.entries.is_empty());
+        assert!(decoder.context.dynamic_table.entries().is_empty());
     }
 }

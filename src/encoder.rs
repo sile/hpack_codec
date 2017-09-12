@@ -19,16 +19,16 @@ impl Encoder {
         &self.context
     }
     pub fn set_dynamic_table_size_hard_limit(&mut self, max_size: u16) {
-        let old = self.context.dynamic_table.max_table_size;
-        self.context.dynamic_table.set_size_limit(max_size);
-        if old != self.context.dynamic_table.max_table_size {
+        let old = self.context.dynamic_table.size_soft_limit();
+        self.context.dynamic_table.set_size_hard_limit(max_size);
+        if old != self.context.dynamic_table.size_soft_limit() {
             self.dynamic_table_size_updates.push(old);
         }
     }
     pub fn set_dynamic_table_size_soft_limit(&mut self, max_size: u16) -> Result<()> {
-        let old = self.context.dynamic_table.max_table_size;
-        track!(self.context.dynamic_table.set_max_size(max_size))?;
-        if old != self.context.dynamic_table.max_table_size {
+        let old = self.context.dynamic_table.size_soft_limit();
+        track!(self.context.dynamic_table.set_size_soft_limit(max_size))?;
+        if old != self.context.dynamic_table.size_soft_limit() {
             self.dynamic_table_size_updates.push(old);
         }
         Ok(())

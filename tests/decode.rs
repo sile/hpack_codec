@@ -35,7 +35,7 @@ fn request_examples_without_huffman_coding() {
     assert_decode!(decoder, reader, b":path", b"/");
     assert_decode!(decoder, reader, b":authority", b"www.example.com");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 57);
+    assert_eq!(decoder.context().dynamic_table().size(), 57);
 
     // C.3.2. Second Request
     let encoded_data;
@@ -53,7 +53,7 @@ fn request_examples_without_huffman_coding() {
     assert_decode!(decoder, reader, b":authority", b"www.example.com");
     assert_decode!(decoder, reader, b"cache-control", b"no-cache");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 110);
+    assert_eq!(decoder.context().dynamic_table().size(), 110);
 
     // C.3.3. Third Request
     let encoded_data;
@@ -72,7 +72,7 @@ fn request_examples_without_huffman_coding() {
     assert_decode!(decoder, reader, b":authority", b"www.example.com");
     assert_decode!(decoder, reader, b"custom-key", b"custom-value");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 164);
+    assert_eq!(decoder.context().dynamic_table().size(), 164);
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn request_examples_with_huffman_coding() {
     assert_decode!(decoder, reader, b":path", b"/");
     assert_decode!(decoder, reader, b":authority", b"www.example.com");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 57);
+    assert_eq!(decoder.context().dynamic_table().size(), 57);
 
     // C.4.2. Second Request
     let encoded_data;
@@ -112,7 +112,7 @@ fn request_examples_with_huffman_coding() {
     assert_decode!(decoder, reader, b":authority", b"www.example.com");
     assert_decode!(decoder, reader, b"cache-control", b"no-cache");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 110);
+    assert_eq!(decoder.context().dynamic_table().size(), 110);
 
     // C.4.3. Third Request
     let encoded_data;
@@ -131,7 +131,7 @@ fn request_examples_with_huffman_coding() {
     assert_decode!(decoder, reader, b":authority", b"www.example.com");
     assert_decode!(decoder, reader, b"custom-key", b"custom-value");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 164);
+    assert_eq!(decoder.context().dynamic_table().size(), 164);
 }
 
 #[test]
@@ -159,7 +159,7 @@ fn response_examples_without_huffman_coding() {
     assert_decode!(decoder, reader, b"date", b"Mon, 21 Oct 2013 20:13:21 GMT");
     assert_decode!(decoder, reader, b"location", b"https://www.example.com");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 222);
+    assert_eq!(decoder.context().dynamic_table().size(), 222);
 
     // C.5.2. Second Response
     let encoded_data;
@@ -175,7 +175,7 @@ fn response_examples_without_huffman_coding() {
     assert_decode!(decoder, reader, b"date", b"Mon, 21 Oct 2013 20:13:21 GMT");
     assert_decode!(decoder, reader, b"location", b"https://www.example.com");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 222);
+    assert_eq!(decoder.context().dynamic_table().size(), 222);
 
     // C.5.3. Third Response
     let encoded_data;
@@ -210,7 +210,7 @@ fn response_examples_without_huffman_coding() {
         &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..]
     );
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 215);
+    assert_eq!(decoder.context().dynamic_table().size(), 215);
 }
 
 #[test]
@@ -237,7 +237,7 @@ fn response_examples_with_huffman_coding() {
     assert_decode!(decoder, reader, b"date", b"Mon, 21 Oct 2013 20:13:21 GMT");
     assert_decode!(decoder, reader, b"location", b"https://www.example.com");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 222);
+    assert_eq!(decoder.context().dynamic_table().size(), 222);
 
     // C.6.2. Second Response
     let encoded_data;
@@ -253,7 +253,7 @@ fn response_examples_with_huffman_coding() {
     assert_decode!(decoder, reader, b"date", b"Mon, 21 Oct 2013 20:13:21 GMT");
     assert_decode!(decoder, reader, b"location", b"https://www.example.com");
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 222);
+    assert_eq!(decoder.context().dynamic_table().size(), 222);
 
     // C.6.3. Third Response
     let encoded_data;
@@ -283,5 +283,5 @@ fn response_examples_with_huffman_coding() {
         &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..]
     );
     assert!(reader.eos());
-    assert_eq!(decoder.table_size(), 215);
+    assert_eq!(decoder.context().dynamic_table().size(), 215);
 }
