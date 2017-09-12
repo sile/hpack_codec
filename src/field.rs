@@ -1,15 +1,16 @@
 use std::cmp;
 use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt};
+use trackable::error::Failed;
 
-use {Result, ErrorKind};
+use Result;
 use literal::{self, HpackString};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Index(u16);
 impl Index {
     pub fn new(index: u16) -> Result<Self> {
-        track_assert_ne!(index, 0, ErrorKind::InvalidInput);
+        track_assert_ne!(index, 0, Failed);
         Ok(Index(index))
     }
     pub fn as_u16(&self) -> u16 {
@@ -54,7 +55,7 @@ impl<'a> Reader<'a> {
     pub fn read_slice(&mut self, size: usize) -> Result<&'a [u8]> {
         track_assert!(
             self.offset + size <= self.octets.len(),
-            ErrorKind::InvalidInput,
+            Failed,
             "offset={}, size={}, octets.len={}",
             self.offset,
             size,

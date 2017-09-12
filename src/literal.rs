@@ -2,8 +2,9 @@ use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::u16;
 use byteorder::{WriteBytesExt, ReadBytesExt};
+use trackable::error::Failed;
 
-use {Result, ErrorKind};
+use Result;
 use field::Reader;
 use huffman;
 
@@ -46,7 +47,7 @@ pub fn decode_u16<R: Read>(mut reader: R, prefix_bits: u8) -> Result<(u8, u16)> 
             let addition = (octet as u16 & 127) << offset;
             value = track_assert_some!(
                 value.checked_add(addition),
-                ErrorKind::InvalidInput,
+                Failed,
                 "Too large integer: {}",
                 value as u32 + addition as u32
             );

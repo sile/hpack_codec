@@ -3,26 +3,25 @@ extern crate byteorder;
 extern crate trackable;
 
 use std::collections::VecDeque;
-
-pub use error::{Error, ErrorKind};
+use trackable::error::Failed;
 
 use field::Index;
 
 macro_rules! track_io {
     ($e:expr) => {
         $e.map_err(|e| {
-            use ::trackable::error::ErrorKindExt;
-            ::ErrorKind::Io.cause(e)
+            use ::trackable::error::{Failed,ErrorKindExt};
+            Failed.cause(e)
         })
     }
 }
 
 pub mod decoder; // TODO: private
-mod error;
 pub mod huffman; // TODO: private
 pub mod field; // TODO: private
 pub mod literal; // TODO: private
 
+pub type Error = trackable::error::TrackableError<trackable::error::Failed>;
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -81,7 +80,7 @@ impl DynamicTable {
     pub fn set_max_size(&mut self, size: u16) -> Result<()> {
         track_assert!(
             size <= self.table_size_limit,
-            ErrorKind::InvalidInput,
+            Failed,
             "size={}, limit={}",
             size,
             self.table_size_limit
@@ -108,12 +107,7 @@ impl DynamicTable {
     }
 
     pub fn find_entry(&self, index: usize) -> Result<Entry<&[u8]>> {
-        let entry = track_assert_some!(
-            self.entries.get(index),
-            ErrorKind::InvalidInput,
-            "Unknown index: {}",
-            index
-        );
+        let entry = track_assert_some!(self.entries.get(index), Failed, "Unknown index: {}", index);
         Ok(Entry {
             name: &entry.name,
             value: &entry.value,

@@ -1,6 +1,7 @@
 use std::cmp;
+use trackable::error::Failed;
 
-use {Result, ErrorKind};
+use Result;
 
 #[derive(Debug)]
 pub struct BitReader<'a> {
@@ -41,7 +42,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
         value = (value << next_bits) + track!(reader.read_bits(next_bits))?;
         acc_bits += next_bits;
         if let Ok(i) = TABLE.binary_search_by_key(&(value, acc_bits), |e| (e.0, e.1)) {
-            track_assert_ne!(i, 256, ErrorKind::InvalidInput);
+            track_assert_ne!(i, 256, Failed);
             buf.push(TABLE[i].2 as u8);
             next_bits = 5;
             acc_bits = 0;
@@ -50,7 +51,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
             next_bits = 1;
         }
     }
-    track_assert_eq!(value, (1 << acc_bits) - 1, ErrorKind::InvalidInput);
+    track_assert_eq!(value, (1 << acc_bits) - 1, Failed);
     Ok(buf)
 }
 
