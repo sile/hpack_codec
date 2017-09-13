@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 
-use field::{FieldName, Index};
+use field::FieldName;
 use literal::{Encoding, HpackString};
+use table::Index;
 
 #[derive(Debug)]
 pub enum Name<'a> {
@@ -63,7 +64,7 @@ pub enum Name<'a> {
 impl<'a> Name<'a> {
     pub fn to_field_name(&self, encoding: Encoding) -> FieldName<Cow<'a, [u8]>> {
         fn index(index: u16) -> FieldName<Cow<'static, [u8]>> {
-            FieldName::Index(Index(index))
+            FieldName::Index(Index::new(index).expect("TOOD"))
         }
         match *self {
             Name::Authority => index(1),

@@ -1,8 +1,8 @@
 use std::io::Write;
 
 use Result;
-use field::{self, Index};
-use table::Table;
+use field;
+use table::{Table, Index};
 
 #[derive(Debug)]
 pub struct Encoder {
@@ -60,9 +60,9 @@ impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
 
     pub fn encode_indexed_header_field(&mut self, index: u16) -> Result<()> {
         track!(self.table.validate_index(index))?;
-        let field = field::HeaderField::Indexed::<Vec<u8>, Vec<u8>>(
-            field::IndexedHeaderField { index: Index(index) },
-        );
+        let field = field::HeaderField::Indexed::<Vec<u8>, Vec<u8>>(field::IndexedHeaderField {
+            index: Index::new(index).expect("TODO"),
+        });
         track!(field.encode(&mut self.writer))?;
         Ok(())
     }

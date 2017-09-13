@@ -1,9 +1,9 @@
 use std;
 use std::collections::VecDeque;
+use std::ops::{Add, AddAssign};
 use trackable::error::Failed;
 
 use Result;
-use field::Index;
 
 #[derive(Debug)]
 pub struct Table {
@@ -22,11 +22,11 @@ impl Table {
     pub fn get(&self, index: Index) -> Result<Entry<&[u8]>> {
         debug_assert_ne!(index.as_u16(), 0);
         let index = index.as_u16() as usize - 1;
-        if index < 61 {
+        if index < STATIC_TABLE.len() {
             Ok(STATIC_TABLE[index].clone())
         } else {
             let entry = track_assert_some!(
-                self.dynamic_table.entries().get(index - 61),
+                self.dynamic_table.entries().get(index - STATIC_TABLE.len()),
                 Failed,
                 "Too large index: {}",
                 index + 1
@@ -117,6 +117,32 @@ impl DynamicTable {
             let evicted = self.entries.pop_back().expect("Never fails");
             self.size -= evicted.size();
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Index(u16);
+impl Index {
+    pub fn new(index: u16) -> Result<Self> {
+        track_assert_ne!(index, 0, Failed);
+        Ok(Index(index))
+    }
+    pub fn dynamic_table_offset() -> Self {
+        Index(STATIC_TABLE.len() as u16 + 1)
+    }
+    pub fn as_u16(&self) -> u16 {
+        self.0
+    }
+}
+impl Add<u16> for Index {
+    type Output = Self;
+    fn add(self, rhs: u16) -> Self::Output {
+        Index(self.0.checked_add(rhs).expect("Overflow"))
+    }
+}
+impl AddAssign<u16> for Index {
+    fn add_assign(&mut self, rhs: u16) {
+        self.0 = self.0.checked_add(rhs).expect("Overflow");
     }
 }
 

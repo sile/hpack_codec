@@ -6,6 +6,7 @@ use trackable::error::Failed;
 
 use {Result, Name};
 use literal::{self, HpackString, Encoding};
+use table::Index;
 
 #[derive(Debug)]
 pub struct LiteralHeaderFieldBuilder {
@@ -52,18 +53,6 @@ impl LiteralHeaderFieldBuilder {
         let value = HpackString::new(value, self.value_encoding);
         let form = self.form;
         LiteralHeaderField { form, name, value }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Index(pub u16);
-impl Index {
-    pub fn new(index: u16) -> Result<Self> {
-        track_assert_ne!(index, 0, Failed);
-        Ok(Index(index))
-    }
-    pub fn as_u16(&self) -> u16 {
-        self.0
     }
 }
 
@@ -187,7 +176,7 @@ impl IndexedHeaderField {
         track!(literal::encode_u16(writer, 1, 7, self.index.as_u16()))
     }
     pub fn decode(reader: &mut Reader) -> Result<Self> {
-        let index = Index(track!(literal::decode_u16(reader, 7))?.1);
+        let index = Index::new(track!(literal::decode_u16(reader, 7))?.1).expect("TODO");
         Ok(IndexedHeaderField { index })
     }
 }
@@ -254,7 +243,7 @@ impl<'a> LiteralHeaderField<&'a [u8], &'a [u8]> {
                 FieldName::Name(name)
             } else {
                 let index = track!(literal::decode_u16(&mut reader, 6))?.1;
-                FieldName::Index(Index(index))
+                FieldName::Index(Index::new(index).expect("TODO"))
             };
             Ok((name, LiteralFieldForm::WithIndexing))
         } else if first_octet == 0b0001_0000 {
@@ -264,7 +253,7 @@ impl<'a> LiteralHeaderField<&'a [u8], &'a [u8]> {
                 FieldName::Name(name)
             } else {
                 let index = track!(literal::decode_u16(&mut reader, 4))?.1;
-                FieldName::Index(Index(index))
+                FieldName::Index(Index::new(index).expect("TODO"))
             };
             Ok((name, LiteralFieldForm::NeverIndexed))
         } else {
@@ -274,7 +263,7 @@ impl<'a> LiteralHeaderField<&'a [u8], &'a [u8]> {
                 FieldName::Name(name)
             } else {
                 let index = track!(literal::decode_u16(&mut reader, 4))?.1;
-                FieldName::Index(Index(index))
+                FieldName::Index(Index::new(index).expect("TODO"))
             };
             Ok((name, LiteralFieldForm::WithoutIndexing))
         }
@@ -331,7 +320,7 @@ mod test {
     fn literal_header_field_without_indexing() {
         let field = HeaderField::Literal::<Vec<u8>, _>(LiteralHeaderField {
             form: LiteralFieldForm::WithoutIndexing,
-            name: FieldName::Index(Index(4)),
+            name: FieldName::Index(Index::new(4).expect("TODO")),
             value: HpackString::new_raw(b"/sample/path"),
         });
 
@@ -407,8 +396,9 @@ mod test {
     #[test]
     /// https://tools.ietf.org/html/rfc7541#appendix-C.2.4
     fn indexed_header_field() {
-        let field =
-            HeaderField::Indexed::<Vec<u8>, Vec<u8>>(IndexedHeaderField { index: Index(2) });
+        let field = HeaderField::Indexed::<Vec<u8>, Vec<u8>>(
+            IndexedHeaderField { index: Index::new(2).expect("TODO") },
+        );
 
         // encode
         let mut buf = Vec::new();
