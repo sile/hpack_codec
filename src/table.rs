@@ -3,6 +3,54 @@ use std::collections::VecDeque;
 use trackable::error::Failed;
 
 use Result;
+use field::Index;
+
+#[derive(Debug)]
+pub struct Table {
+    dynamic_table: DynamicTable,
+}
+impl Table {
+    pub fn new(max_dynamic_table_size: u16) -> Self {
+        Table { dynamic_table: DynamicTable::new(max_dynamic_table_size) }
+    }
+    pub fn dynamic(&self) -> &DynamicTable {
+        &self.dynamic_table
+    }
+    pub fn dynamic_mut(&mut self) -> &mut DynamicTable {
+        &mut self.dynamic_table
+    }
+    pub fn get(&self, index: Index) -> Result<Entry<&[u8]>> {
+        debug_assert_ne!(index.as_u16(), 0);
+        let index = index.as_u16() as usize - 1;
+        if index < 61 {
+            Ok(STATIC_TABLE[index].clone())
+        } else {
+            let entry = track_assert_some!(
+                self.dynamic_table.entries().get(index - 61),
+                Failed,
+                "Too large index: {}",
+                index + 1
+            );
+            Ok(entry.as_ref())
+        }
+    }
+    pub fn len(&self) -> u16 {
+        (STATIC_TABLE.len() + self.dynamic_table.entries().len()) as u16
+    }
+
+    pub(crate) fn validate_index(&self, index: u16) -> Result<()> {
+        let max_index = STATIC_TABLE.len() + self.dynamic_table.entries().len();
+        track_assert!(
+            index as usize <= max_index,
+            Failed,
+            "Too large index: {} (max={})",
+            index,
+            max_index
+        );
+        track_assert_ne!(index, 0, Failed);
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub struct DynamicTable {
@@ -51,7 +99,7 @@ impl DynamicTable {
         Ok(())
     }
 
-    pub(crate) fn push_entry(&mut self, name: Vec<u8>, value: Vec<u8>) -> Option<Entry<Vec<u8>>> {
+    pub(crate) fn push(&mut self, name: Vec<u8>, value: Vec<u8>) -> Option<Entry<Vec<u8>>> {
         let entry = Entry { name, value };
         if self.size_soft_limit < entry.size() {
             self.entries.clear();

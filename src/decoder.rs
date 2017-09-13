@@ -1,9 +1,8 @@
 use std::borrow::Cow;
 
-use Context;
-
 use Result;
 use field::{self, Reader};
+use table::Table;
 
 #[derive(Debug)]
 pub struct HeaderField<'a> {
@@ -13,14 +12,14 @@ pub struct HeaderField<'a> {
 
 #[derive(Debug)]
 pub struct Decoder {
-    context: Context,
+    table: Table,
 }
 impl Decoder {
-    pub fn context(&self) -> &Context {
-        &self.context
+    pub fn table(&self) -> &Table {
+        &self.table
     }
     pub fn new(max_dynamic_table_size: u16) -> Self {
-        Decoder { context: Context::new(max_dynamic_table_size) }
+        Decoder { table: Table::new(max_dynamic_table_size) }
     }
     pub fn decode<'a, 'b: 'a>(&'a mut self, reader: &mut Reader<'b>) -> Result<HeaderField<'a>> {
         loop {
@@ -29,14 +28,14 @@ impl Decoder {
                 field::HeaderField::Indexed(f) => return track!(self.handle_indexed_field(f)),
                 field::HeaderField::Literal(f) => return track!(self.handle_literal_field(f)),
                 field::HeaderField::Update(f) => {
-                    track!(self.context.dynamic_table.set_size_soft_limit(f.max_size))?;
+                    track!(self.table.dynamic_mut().set_size_soft_limit(f.max_size))?;
                 }
             }
         }
     }
 
     fn handle_indexed_field(&mut self, field: field::IndexedHeaderField) -> Result<HeaderField> {
-        let entry = track!(self.context.find_entry(field.index))?;
+        let entry = track!(self.table.get(field.index))?;
         Ok(HeaderField {
             name: Cow::Borrowed(entry.name),
             value: Cow::Borrowed(entry.value),
@@ -49,20 +48,18 @@ impl Decoder {
     ) -> Result<HeaderField<'b>> {
         if let field::LiteralFieldForm::WithIndexing = field.form {
             let name = match field.name {
-                field::FieldName::Index(index) => {
-                    track!(self.context.find_entry(index))?.name.to_owned()
-                }
+                field::FieldName::Index(index) => track!(self.table.get(index))?.name.to_owned(),
                 field::FieldName::Name(ref name) => track!(name.to_cow_str())?.into_owned(),
             };
             let value = track!(field.value.to_cow_str())?.into_owned();
 
-            if let Some(entry) = self.context.dynamic_table.push_entry(name, value) {
+            if let Some(entry) = self.table.dynamic_mut().push(name, value) {
                 Ok(HeaderField {
                     name: Cow::Owned(entry.name),
                     value: Cow::Owned(entry.value),
                 })
             } else {
-                let entry = self.context.dynamic_table.entries()[0].as_ref();
+                let entry = self.table.dynamic().entries()[0].as_ref();
                 Ok(HeaderField {
                     name: Cow::Borrowed(entry.name),
                     value: Cow::Borrowed(entry.value),
@@ -71,7 +68,7 @@ impl Decoder {
         } else {
             let name = match field.name {
                 field::FieldName::Index(index) => {
-                    Cow::Borrowed(track!(self.context.find_entry(index))?.name)
+                    Cow::Borrowed(track!(self.table.get(index))?.name)
                 }
                 field::FieldName::Name(ref name) => track!(name.to_cow_str())?,
             };
@@ -106,16 +103,10 @@ mod test {
             assert_eq!(field.name.as_ref(), b"custom-key");
             assert_eq!(field.value.as_ref(), b"custom-header");
         }
-        assert_eq!(decoder.context.dynamic_table.entries().len(), 1);
-        assert_eq!(decoder.context.dynamic_table.size(), 55);
-        assert_eq!(
-            decoder.context.dynamic_table.entries()[0].name,
-            b"custom-key"
-        );
-        assert_eq!(
-            decoder.context.dynamic_table.entries()[0].value,
-            b"custom-header"
-        );
+        assert_eq!(decoder.table.dynamic().entries().len(), 1);
+        assert_eq!(decoder.table.dynamic().size(), 55);
+        assert_eq!(decoder.table.dynamic().entries()[0].name, b"custom-key");
+        assert_eq!(decoder.table.dynamic().entries()[0].value, b"custom-header");
     }
 
     #[test]
@@ -137,7 +128,7 @@ mod test {
             assert_eq!(field.name.as_ref(), b":path");
             assert_eq!(field.value.as_ref(), b"/sample/path");
         }
-        assert_eq!(decoder.context.dynamic_table.entries().len(), 0);
+        assert_eq!(decoder.table.dynamic().entries().len(), 0);
     }
 
     #[test]
@@ -159,7 +150,7 @@ mod test {
             assert_eq!(field.name.as_ref(), b"password");
             assert_eq!(field.value.as_ref(), b"secret");
         }
-        assert_eq!(decoder.context.dynamic_table.entries().len(), 0);
+        assert_eq!(decoder.table.dynamic().entries().len(), 0);
     }
 
     #[test]
@@ -174,6 +165,6 @@ mod test {
             assert_eq!(field.name.as_ref(), b":method");
             assert_eq!(field.value.as_ref(), b"GET");
         }
-        assert!(decoder.context.dynamic_table.entries().is_empty());
+        assert!(decoder.table.dynamic().entries().is_empty());
     }
 }

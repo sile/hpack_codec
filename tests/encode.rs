@@ -2,14 +2,15 @@ extern crate hpack_codec;
 #[macro_use]
 extern crate trackable;
 
-use hpack_codec::{Context, Encoder, Name};
+use hpack_codec::{Encoder, Name};
 use hpack_codec::field::LiteralHeaderFieldBuilder;
 use hpack_codec::literal::Encoding;
+use hpack_codec::table::Table;
 
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.3
 fn request_examples_without_huffman_coding() {
-    let mut encoder = Encoder::new(Context::new(4096));
+    let mut encoder = Encoder::new(Table::new(4096));
 
     // C.3.1. First Request
     {
@@ -34,7 +35,7 @@ fn request_examples_without_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 57);
+    assert_eq!(encoder.table().dynamic().size(), 57);
 
     // C.3.2. Second Request
     {
@@ -60,7 +61,7 @@ fn request_examples_without_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 110);
+    assert_eq!(encoder.table().dynamic().size(), 110);
 
     // C.3.3. Third Request
     {
@@ -87,13 +88,13 @@ fn request_examples_without_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 164);
+    assert_eq!(encoder.table().dynamic().size(), 164);
 }
 
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.4
 fn request_examples_with_huffman_coding() {
-    let mut encoder = Encoder::new(Context::new(4096));
+    let mut encoder = Encoder::new(Table::new(4096));
 
     // C.4.1. First Request
     {
@@ -119,7 +120,7 @@ fn request_examples_with_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 57);
+    assert_eq!(encoder.table().dynamic().size(), 57);
 
     // C.4.2. Second Request
     {
@@ -145,7 +146,7 @@ fn request_examples_with_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 110);
+    assert_eq!(encoder.table().dynamic().size(), 110);
 
     // C.4.3. Third Request
     {
@@ -174,13 +175,13 @@ fn request_examples_with_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 164);
+    assert_eq!(encoder.table().dynamic().size(), 164);
 }
 
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.5
 fn response_examples_without_huffman_coding() {
-    let mut encoder = Encoder::new(Context::new(256));
+    let mut encoder = Encoder::new(Table::new(256));
 
     // C.5.1. First Request
     {
@@ -225,7 +226,7 @@ fn response_examples_without_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 222);
+    assert_eq!(encoder.table().dynamic().size(), 222);
 
     // C.5.2. Second Request
     {
@@ -249,7 +250,7 @@ fn response_examples_without_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 222);
+    assert_eq!(encoder.table().dynamic().size(), 222);
 
     // C.5.3. Third Request
     {
@@ -297,13 +298,13 @@ fn response_examples_without_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 215);
+    assert_eq!(encoder.table().dynamic().size(), 215);
 }
 
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.6
 fn response_examples_with_huffman_coding() {
-    let mut encoder = Encoder::new(Context::new(256));
+    let mut encoder = Encoder::new(Table::new(256));
 
     // C.6.1. First Request
     {
@@ -350,7 +351,7 @@ fn response_examples_with_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 222);
+    assert_eq!(encoder.table().dynamic().size(), 222);
 
     // C.6.2. Second Request
     {
@@ -375,7 +376,7 @@ fn response_examples_with_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 222);
+    assert_eq!(encoder.table().dynamic().size(), 222);
 
     // C.6.3. Third Request
     {
@@ -424,5 +425,5 @@ fn response_examples_with_huffman_coding() {
         }
         assert_eq!(block.finish(), &expected[..]);
     }
-    assert_eq!(encoder.context().dynamic_table().size(), 215);
+    assert_eq!(encoder.table().dynamic().size(), 215);
 }

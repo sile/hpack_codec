@@ -1,34 +1,35 @@
 use std::io::Write;
 
-use {Result, Context};
+use Result;
 use field::{self, Index};
+use table::Table;
 
 #[derive(Debug)]
 pub struct Encoder {
-    context: Context,
+    table: Table,
     dynamic_table_size_updates: Vec<u16>,
 }
 impl Encoder {
-    pub fn new(context: Context) -> Self {
+    pub fn new(table: Table) -> Self {
         Encoder {
-            context,
+            table,
             dynamic_table_size_updates: Vec::new(),
         }
     }
-    pub fn context(&self) -> &Context {
-        &self.context
+    pub fn table(&self) -> &Table {
+        &self.table
     }
     pub fn set_dynamic_table_size_hard_limit(&mut self, max_size: u16) {
-        let old = self.context.dynamic_table.size_soft_limit();
-        self.context.dynamic_table.set_size_hard_limit(max_size);
-        if old != self.context.dynamic_table.size_soft_limit() {
+        let old = self.table.dynamic().size_soft_limit();
+        self.table.dynamic_mut().set_size_hard_limit(max_size);
+        if old != self.table.dynamic().size_soft_limit() {
             self.dynamic_table_size_updates.push(old);
         }
     }
     pub fn set_dynamic_table_size_soft_limit(&mut self, max_size: u16) -> Result<()> {
-        let old = self.context.dynamic_table.size_soft_limit();
-        track!(self.context.dynamic_table.set_size_soft_limit(max_size))?;
-        if old != self.context.dynamic_table.size_soft_limit() {
+        let old = self.table.dynamic().size_soft_limit();
+        track!(self.table.dynamic_mut().set_size_soft_limit(max_size))?;
+        if old != self.table.dynamic().size_soft_limit() {
             self.dynamic_table_size_updates.push(old);
         }
         Ok(())
@@ -41,7 +42,7 @@ impl Encoder {
             track!(entry.encode(&mut writer))?;
         }
         Ok(HeaderBlockEncoder {
-            context: &mut self.context,
+            table: &mut self.table,
             writer,
         })
     }
@@ -49,16 +50,16 @@ impl Encoder {
 
 #[derive(Debug)]
 pub struct HeaderBlockEncoder<'a, W> {
-    context: &'a mut Context,
+    table: &'a mut Table,
     writer: W,
 }
 impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
-    pub fn context(&self) -> &Context {
-        &self.context
+    pub fn table(&self) -> &Table {
+        &self.table
     }
 
     pub fn encode_indexed_header_field(&mut self, index: u16) -> Result<()> {
-        track!(self.context.validate_entry_index(index))?;
+        track!(self.table.validate_index(index))?;
         let field = field::HeaderField::Indexed::<Vec<u8>, Vec<u8>>(
             field::IndexedHeaderField { index: Index(index) },
         );
@@ -75,18 +76,18 @@ impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
         V: AsRef<[u8]>,
     {
         if let field::FieldName::Index(index) = field.name {
-            track!(self.context.validate_entry_index(index.as_u16()))?;
+            track!(self.table.validate_index(index.as_u16()))?;
         };
         if let field::LiteralFieldForm::WithIndexing = field.form {
             let name = match field.name {
                 field::FieldName::Index(index) => {
-                    let entry = track!(self.context.find_entry(index))?;
+                    let entry = track!(self.table.get(index))?;
                     entry.name.to_owned()
                 }
                 field::FieldName::Name(ref name) => track!(name.to_vec())?,
             };
             let value = track!(field.value.to_vec())?;
-            self.context.dynamic_table.push_entry(name, value);
+            self.table.dynamic_mut().push(name, value);
         }
         track!(field.encode(&mut self.writer))?;
         Ok(())
