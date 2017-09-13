@@ -59,7 +59,7 @@ impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
     }
 
     pub fn encode_indexed_header_field(&mut self, index: u16) -> Result<()> {
-        track!(self.table.validate_index(index))?;
+        track!(self.table.validate_index(Index::new(index).expect("TODO")))?;
         let field = field::HeaderField::Indexed::<Vec<u8>, Vec<u8>>(field::IndexedHeaderField {
             index: Index::new(index).expect("TODO"),
         });
@@ -76,7 +76,7 @@ impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
         V: AsRef<[u8]>,
     {
         if let field::FieldName::Index(index) = field.name {
-            track!(self.table.validate_index(index.as_u16()))?;
+            track!(self.table.validate_index(index))?;
         };
         if let field::LiteralFieldForm::WithIndexing = field.form {
             let name = match field.name {
