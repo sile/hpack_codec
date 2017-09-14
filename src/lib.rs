@@ -2,8 +2,6 @@ extern crate byteorder;
 #[macro_use]
 extern crate trackable;
 
-pub use encoder::{Encoder, HeaderBlockEncoder};
-
 macro_rules! track_io {
     ($e:expr) => {
         $e.map_err(|e| {
@@ -12,6 +10,9 @@ macro_rules! track_io {
         })
     }
 }
+
+pub use decoder::{Decoder, HeaderBlockDecoder};
+pub use encoder::{Encoder, HeaderBlockEncoder};
 
 pub mod field;
 pub mod table;

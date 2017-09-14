@@ -66,7 +66,7 @@ pub enum Encoding {
 #[derive(Debug)]
 pub struct HpackString<B> {
     encoding: Encoding,
-    octets: B,
+    octets: B, // TODO: cow
 }
 impl<B> HpackString<B>
 where
@@ -133,9 +133,19 @@ impl<'a> HpackString<&'a [u8]> {
         };
         HpackString { encoding, octets }
     }
+}
+impl<'a> HpackString<Cow<'a, [u8]>> {
+    pub fn into_raw(self) -> Result<Cow<'a, [u8]>> {
+        if let Encoding::Raw = self.encoding {
+            Ok(self.octets)
+        } else {
+            let octets = track!(huffman::decode(self.octets.as_ref()))?;
+            Ok(Cow::Owned(octets))
+        }
+    }
     pub fn decode(mut reader: &mut SliceReader<'a>) -> Result<Self> {
         let (encoding, octets_len) = track!(decode_u16(&mut reader, 7))?;
-        let octets = track!(reader.read_slice(octets_len as usize))?;
+        let octets = Cow::Borrowed(track!(reader.read_slice(octets_len as usize))?);
         let encoding = if encoding == 0 {
             Encoding::Raw
         } else {
@@ -143,14 +153,8 @@ impl<'a> HpackString<&'a [u8]> {
         };
         Ok(HpackString { encoding, octets })
     }
-    pub fn to_cow_str(&self) -> Result<Cow<'a, [u8]>> {
-        if let Encoding::Raw = self.encoding {
-            Ok(Cow::Borrowed(self.octets))
-        } else {
-            track!(huffman::decode(&self.octets)).map(Cow::Owned)
-        }
-    }
 }
+
 
 #[cfg(test)]
 mod test {

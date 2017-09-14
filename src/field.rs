@@ -1,10 +1,18 @@
 use std::borrow::Cow;
 use std::io::Write;
 use byteorder::WriteBytesExt;
+use trackable::error::Failed;
 
 use Result;
+use io::SliceReader;
 use literal::{self, HpackString, Encoding};
 use table::{Index, StaticEntry};
+
+#[derive(Debug)]
+pub struct PlainHeaderField<'a> {
+    pub name: Cow<'a, [u8]>,
+    pub value: Cow<'a, [u8]>,
+}
 
 #[derive(Debug)]
 pub enum HeaderField<'a> {
@@ -16,6 +24,21 @@ impl<'a> HeaderField<'a> {
         match *self {
             HeaderField::Indexed(ref field) => track!(field.encode(writer)),
             HeaderField::Literal(ref field) => track!(field.encode(writer)),
+        }
+    }
+    pub fn decode(reader: &mut SliceReader<'a>) -> Result<Self> {
+        let octet = track_io!(reader.peek_u8())?;
+        if octet >> 7 == 0b1 {
+            track!(IndexedHeaderField::decode(reader)).map(HeaderField::Indexed)
+        } else if octet >> 5 == 0b001 {
+            track_panic!(
+                Failed,
+                "Dynamic table size update MUST occur at the beginning of the first header block"
+            );
+        } else {
+            track!(LiteralHeaderField::decode(reader, octet).map(
+                HeaderField::Literal,
+            ))
         }
     }
 }
@@ -43,6 +66,10 @@ impl IndexedHeaderField {
     }
     pub fn encode<W: Write>(&self, writer: W) -> Result<()> {
         track!(literal::encode_u16(writer, 1, 7, self.0.as_u16()))
+    }
+    pub fn decode(reader: &mut SliceReader) -> Result<Self> {
+        let index = Index::new(track!(literal::decode_u16(reader, 7))?.1).expect("TODO");
+        Ok(IndexedHeaderField(index))
     }
 }
 
@@ -96,6 +123,49 @@ impl<'a> LiteralHeaderField<'a> {
     pub fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
         track!(self.encode_name(&mut writer))?;
         track!(self.value.encode(writer))
+    }
+
+    pub fn decode(reader: &mut SliceReader<'a>, first_octet: u8) -> Result<Self> {
+        let (name, form) = track!(Self::decode_name_and_form(reader, first_octet))?;
+        let value = track!(HpackString::decode(reader))?;
+        Ok(LiteralHeaderField { name, value, form })
+    }
+
+    fn decode_name_and_form(
+        mut reader: &mut SliceReader<'a>,
+        first_octet: u8,
+    ) -> Result<(FieldName<'a>, LiteralFieldForm)> {
+        if first_octet >> 6 == 0b01 {
+            let name = if first_octet & 0b11_1111 == 0 {
+                reader.consume(1);
+                let name = track!(HpackString::decode(reader))?;
+                FieldName::Name(name)
+            } else {
+                let index = track!(literal::decode_u16(&mut reader, 6))?.1;
+                FieldName::Index(Index::new(index).expect("TODO"))
+            };
+            Ok((name, LiteralFieldForm::WithIndexing))
+        } else if first_octet == 0b0001_0000 {
+            let name = if first_octet & 0b1111 == 0 {
+                reader.consume(1);
+                let name = track!(HpackString::decode(reader))?;
+                FieldName::Name(name)
+            } else {
+                let index = track!(literal::decode_u16(&mut reader, 4))?.1;
+                FieldName::Index(Index::new(index).expect("TODO"))
+            };
+            Ok((name, LiteralFieldForm::NeverIndexed))
+        } else {
+            let name = if first_octet & 0b1111 == 0 {
+                reader.consume(1);
+                let name = track!(HpackString::decode(reader))?;
+                FieldName::Name(name)
+            } else {
+                let index = track!(literal::decode_u16(&mut reader, 4))?.1;
+                FieldName::Index(Index::new(index).expect("TODO"))
+            };
+            Ok((name, LiteralFieldForm::WithoutIndexing))
+        }
     }
 
     fn encode_name<W: Write>(&self, mut writer: W) -> Result<()> {
