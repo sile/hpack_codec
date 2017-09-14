@@ -5,8 +5,8 @@ use byteorder::{WriteBytesExt, ReadBytesExt};
 use trackable::error::Failed;
 
 use Result;
-use field::Reader;
 use huffman;
+use io::SliceReader;
 
 pub fn encode_u16<W: Write>(
     mut writer: W,
@@ -72,7 +72,10 @@ impl<B> HpackString<B>
 where
     B: AsRef<[u8]>,
 {
-    #[cfg(test)]
+    pub fn encoding(&self) -> Encoding {
+        self.encoding
+    }
+    // TODO: #[cfg(test)]
     pub fn octets(&self) -> &[u8] {
         self.octets.as_ref()
     }
@@ -114,6 +117,14 @@ where
         }
     }
 }
+impl HpackString<Vec<u8>> {
+    pub fn into_cow(self) -> HpackString<Cow<'static, [u8]>> {
+        HpackString {
+            encoding: self.encoding,
+            octets: Cow::Owned(self.octets),
+        }
+    }
+}
 impl<'a> HpackString<&'a [u8]> {
     pub fn new(octets: &'a [u8], encoding: Encoding) -> HpackString<Cow<'a, [u8]>> {
         let octets = match encoding {
@@ -122,7 +133,7 @@ impl<'a> HpackString<&'a [u8]> {
         };
         HpackString { encoding, octets }
     }
-    pub fn decode(mut reader: &mut Reader<'a>) -> Result<Self> {
+    pub fn decode(mut reader: &mut SliceReader<'a>) -> Result<Self> {
         let (encoding, octets_len) = track!(decode_u16(&mut reader, 7))?;
         let octets = track!(reader.read_slice(octets_len as usize))?;
         let encoding = if encoding == 0 {

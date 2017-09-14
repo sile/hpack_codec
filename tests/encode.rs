@@ -2,10 +2,9 @@ extern crate hpack_codec;
 #[macro_use]
 extern crate trackable;
 
-use hpack_codec::{Encoder, Name};
-use hpack_codec::field::LiteralHeaderFieldBuilder;
-use hpack_codec::literal::Encoding;
-use hpack_codec::table::Table;
+use hpack_codec::Encoder;
+use hpack_codec::field2::LiteralHeaderField;
+use hpack_codec::table::{Table, StaticEntry, Index};
 
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.3
@@ -15,15 +14,15 @@ fn request_examples_without_huffman_coding() {
     // C.3.1. First Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_indexed_header_field(2));
-        track_try_unwrap!(block.encode_indexed_header_field(6));
-        track_try_unwrap!(block.encode_indexed_header_field(4));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::Authority,
-                b"www.example.com",
-            ),
-        ));
+        track_try_unwrap!(block.encode_field(StaticEntry::MethodGet));
+        track_try_unwrap!(block.encode_field(StaticEntry::SchemeHttp));
+        track_try_unwrap!(block.encode_field(StaticEntry::PathRoot));
+        track_try_unwrap!(
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::Authority, b"www.example.com")
+                    .with_indexing(),
+            )
+        );
 
         let expected;
         #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -40,16 +39,16 @@ fn request_examples_without_huffman_coding() {
     // C.3.2. Second Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_indexed_header_field(2));
-        track_try_unwrap!(block.encode_indexed_header_field(6));
-        track_try_unwrap!(block.encode_indexed_header_field(4));
-        track_try_unwrap!(block.encode_indexed_header_field(62));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::CacheControl,
-                b"no-cache",
-            ),
-        ));
+        track_try_unwrap!(block.encode_field(StaticEntry::MethodGet));
+        track_try_unwrap!(block.encode_field(StaticEntry::SchemeHttp));
+        track_try_unwrap!(block.encode_field(StaticEntry::PathRoot));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset()));
+        track_try_unwrap!(
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::CacheControl, b"no-cache")
+                    .with_indexing(),
+            )
+        );
 
         let expected;
         #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -66,15 +65,12 @@ fn request_examples_without_huffman_coding() {
     // C.3.3. Third Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_indexed_header_field(2));
-        track_try_unwrap!(block.encode_indexed_header_field(7));
-        track_try_unwrap!(block.encode_indexed_header_field(5));
-        track_try_unwrap!(block.encode_indexed_header_field(63));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::Name(b"custom-key"),
-                b"custom-value",
-            ),
+        track_try_unwrap!(block.encode_field(StaticEntry::MethodGet));
+        track_try_unwrap!(block.encode_field(StaticEntry::SchemeHttps));
+        track_try_unwrap!(block.encode_field(StaticEntry::PathIndexHtml));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 1));
+        track_try_unwrap!(block.encode_field(
+            LiteralHeaderField::new(b"custom-key", b"custom-value").with_indexing(),
         ));
 
         let expected;
@@ -99,14 +95,14 @@ fn request_examples_with_huffman_coding() {
     // C.4.1. First Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_indexed_header_field(2));
-        track_try_unwrap!(block.encode_indexed_header_field(6));
-        track_try_unwrap!(block.encode_indexed_header_field(4));
+        track_try_unwrap!(block.encode_field(StaticEntry::MethodGet));
+        track_try_unwrap!(block.encode_field(StaticEntry::SchemeHttp));
+        track_try_unwrap!(block.encode_field(StaticEntry::PathRoot));
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::Authority, b"www.example.com"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::Authority, b"www.example.com")
+                    .with_indexing()
+                    .huffman_encoded_value(),
             )
         );
 
@@ -115,7 +111,7 @@ fn request_examples_with_huffman_coding() {
         {
             expected = [
                 0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2,
-                0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff             
+                0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff
             ];
         }
         assert_eq!(block.finish(), &expected[..]);
@@ -125,15 +121,15 @@ fn request_examples_with_huffman_coding() {
     // C.4.2. Second Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_indexed_header_field(2));
-        track_try_unwrap!(block.encode_indexed_header_field(6));
-        track_try_unwrap!(block.encode_indexed_header_field(4));
-        track_try_unwrap!(block.encode_indexed_header_field(62));
+        track_try_unwrap!(block.encode_field(StaticEntry::MethodGet));
+        track_try_unwrap!(block.encode_field(StaticEntry::SchemeHttp));
+        track_try_unwrap!(block.encode_field(StaticEntry::PathRoot));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset()));
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::CacheControl, b"no-cache"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::CacheControl, b"no-cache")
+                    .with_indexing()
+                    .huffman_encoded_value(),
             )
         );
 
@@ -151,16 +147,16 @@ fn request_examples_with_huffman_coding() {
     // C.4.3. Third Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_indexed_header_field(2));
-        track_try_unwrap!(block.encode_indexed_header_field(7));
-        track_try_unwrap!(block.encode_indexed_header_field(5));
-        track_try_unwrap!(block.encode_indexed_header_field(63));
+        track_try_unwrap!(block.encode_field(StaticEntry::MethodGet));
+        track_try_unwrap!(block.encode_field(StaticEntry::SchemeHttps));
+        track_try_unwrap!(block.encode_field(StaticEntry::PathIndexHtml));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 1));
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .name_encoding(Encoding::Huffman)
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::Name(b"custom-key"), b"custom-value"),
+            block.encode_field(
+                LiteralHeaderField::new(b"custom-key", b"custom-value")
+                    .with_indexing()
+                    .huffman_encoded_name()
+                    .huffman_encoded_value(),
             )
         );
 
@@ -186,30 +182,31 @@ fn response_examples_without_huffman_coding() {
     // C.5.1. First Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::Status,
-                b"302",
-            ),
+        track_try_unwrap!(block.encode_field(
+            LiteralHeaderField::with_indexed_name(StaticEntry::Status, b"302").with_indexing(),
         ));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::CacheControl,
-                b"private",
-            ),
-        ));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::Date,
-                b"Mon, 21 Oct 2013 20:13:21 GMT",
-            ),
-        ));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::Location,
-                b"https://www.example.com",
-            ),
-        ));
+        track_try_unwrap!(
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::CacheControl, b"private")
+                    .with_indexing(),
+            )
+        );
+        track_try_unwrap!(
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(
+                    StaticEntry::Date,
+                    b"Mon, 21 Oct 2013 20:13:21 GMT",
+                ).with_indexing(),
+            )
+        );
+        track_try_unwrap!(
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(
+                    StaticEntry::Location,
+                    b"https://www.example.com",
+                ).with_indexing(),
+            )
+        );
 
         let expected;
         #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -231,15 +228,12 @@ fn response_examples_without_huffman_coding() {
     // C.5.2. Second Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::Status,
-                b"307",
-            ),
+        track_try_unwrap!(block.encode_field(
+            LiteralHeaderField::with_indexed_name(StaticEntry::Status, b"307").with_indexing(),
         ));
-        track_try_unwrap!(block.encode_indexed_header_field(65));
-        track_try_unwrap!(block.encode_indexed_header_field(64));
-        track_try_unwrap!(block.encode_indexed_header_field(63));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 3));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 2));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 1));
 
         let expected;
         #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -255,27 +249,31 @@ fn response_examples_without_huffman_coding() {
     // C.5.3. Third Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_indexed_header_field(8));
-        track_try_unwrap!(block.encode_indexed_header_field(65));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::Date,
-                b"Mon, 21 Oct 2013 20:13:22 GMT",
-            ),
-        ));
-        track_try_unwrap!(block.encode_indexed_header_field(64));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::ContentEncoding,
-                b"gzip",
-            ),
-        ));
-        track_try_unwrap!(block.encode_literal_header_field(
-            LiteralHeaderFieldBuilder::with_indexing().finish(
-                Name::SetCookie,
-                &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..],
-            ),
-        ));
+        track_try_unwrap!(block.encode_field(StaticEntry::Status200));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 3));
+        track_try_unwrap!(
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(
+                    StaticEntry::Date,
+                    b"Mon, 21 Oct 2013 20:13:22 GMT",
+                ).with_indexing(),
+            )
+        );
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 2));
+        track_try_unwrap!(
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::ContentEncoding, b"gzip")
+                    .with_indexing(),
+            )
+        );
+        track_try_unwrap!(
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(
+                    StaticEntry::SetCookie,
+                    &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..],
+                ).with_indexing(),
+            )
+        );
 
         let expected;
         #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -310,31 +308,35 @@ fn response_examples_with_huffman_coding() {
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::Status, b"302"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::Status, b"302")
+                    .with_indexing()
+                    .huffman_encoded_value(),
             )
         );
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::CacheControl, b"private"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::CacheControl, b"private")
+                    .with_indexing()
+                    .huffman_encoded_value(),
             )
         );
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::Date, b"Mon, 21 Oct 2013 20:13:21 GMT"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(
+                    StaticEntry::Date,
+                    b"Mon, 21 Oct 2013 20:13:21 GMT",
+                ).with_indexing()
+                    .huffman_encoded_value(),
             )
         );
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::Location, b"https://www.example.com"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(
+                    StaticEntry::Location,
+                    b"https://www.example.com",
+                ).with_indexing()
+                    .huffman_encoded_value(),
             )
         );
 
@@ -346,7 +348,7 @@ fn response_examples_with_huffman_coding() {
                 0x61, 0x96, 0xd0, 0x7a, 0xbe, 0x94, 0x10, 0x54, 0xd4, 0x44, 0xa8,
                 0x20, 0x05, 0x95, 0x04, 0x0b, 0x81, 0x66, 0xe0, 0x82, 0xa6, 0x2d,
                 0x1b, 0xff, 0x6e, 0x91, 0x9d, 0x29, 0xad, 0x17, 0x18, 0x63, 0xc7,
-                0x8f, 0x0b, 0x97, 0xc8, 0xe9, 0xae, 0x82, 0xae, 0x43, 0xd3            
+                0x8f, 0x0b, 0x97, 0xc8, 0xe9, 0xae, 0x82, 0xae, 0x43, 0xd3
             ];
         }
         assert_eq!(block.finish(), &expected[..]);
@@ -357,15 +359,15 @@ fn response_examples_with_huffman_coding() {
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::Status, b"307"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::Status, b"307")
+                    .with_indexing()
+                    .huffman_encoded_value(),
             )
         );
-        track_try_unwrap!(block.encode_indexed_header_field(65));
-        track_try_unwrap!(block.encode_indexed_header_field(64));
-        track_try_unwrap!(block.encode_indexed_header_field(63));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 3));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 2));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 1));
 
         let expected;
         #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -381,31 +383,32 @@ fn response_examples_with_huffman_coding() {
     // C.6.3. Third Request
     {
         let mut block = track_try_unwrap!(encoder.enter_header_block(Vec::new()));
-        track_try_unwrap!(block.encode_indexed_header_field(8));
-        track_try_unwrap!(block.encode_indexed_header_field(65));
+        track_try_unwrap!(block.encode_field(StaticEntry::Status200));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 3));
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::Date, b"Mon, 21 Oct 2013 20:13:22 GMT"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(
+                    StaticEntry::Date,
+                    b"Mon, 21 Oct 2013 20:13:22 GMT",
+                ).with_indexing()
+                    .huffman_encoded_value(),
             )
         );
-        track_try_unwrap!(block.encode_indexed_header_field(64));
+        track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 2));
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(Name::ContentEncoding, b"gzip"),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(StaticEntry::ContentEncoding, b"gzip")
+                    .with_indexing()
+                    .huffman_encoded_value(),
             )
         );
         track_try_unwrap!(
-            block.encode_literal_header_field(
-                LiteralHeaderFieldBuilder::with_indexing()
-                    .value_encoding(Encoding::Huffman)
-                    .finish(
-                        Name::SetCookie,
-                        &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..],
-                    ),
+            block.encode_field(
+                LiteralHeaderField::with_indexed_name(
+                    StaticEntry::SetCookie,
+                    &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..],
+                ).with_indexing()
+                    .huffman_encoded_value(),
             )
         );
 

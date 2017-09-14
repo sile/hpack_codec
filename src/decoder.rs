@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 
 use Result;
-use field::{self, Reader};
+use field::LiteralFieldForm;
+use io::SliceReader;
 use table::Table;
 
 #[derive(Debug)]
@@ -21,20 +22,23 @@ impl Decoder {
     pub fn new(max_dynamic_table_size: u16) -> Self {
         Decoder { table: Table::new(max_dynamic_table_size) }
     }
-    pub fn decode<'a, 'b: 'a>(&'a mut self, reader: &mut Reader<'b>) -> Result<HeaderField<'a>> {
+    pub fn decode<'a, 'b: 'a>(
+        &'a mut self,
+        reader: &mut SliceReader<'b>,
+    ) -> Result<HeaderField<'a>> {
         loop {
-            let field = track!(field::HeaderField::decode(reader))?;
+            let field = track!(HeaderField::decode(reader))?;
             match field {
-                field::HeaderField::Indexed(f) => return track!(self.handle_indexed_field(f)),
-                field::HeaderField::Literal(f) => return track!(self.handle_literal_field(f)),
-                field::HeaderField::Update(f) => {
+                HeaderField::Indexed(f) => return track!(self.handle_indexed_field(f)),
+                HeaderField::Literal(f) => return track!(self.handle_literal_field(f)),
+                HeaderField::Update(f) => {
                     track!(self.table.dynamic_mut().set_size_soft_limit(f.max_size))?;
                 }
             }
         }
     }
 
-    fn handle_indexed_field(&mut self, field: field::IndexedHeaderField) -> Result<HeaderField> {
+    fn handle_indexed_field(&mut self, field: IndexedHeaderField) -> Result<HeaderField> {
         let entry = track!(self.table.get(field.index))?;
         Ok(HeaderField {
             name: Cow::Borrowed(entry.name),
@@ -44,12 +48,12 @@ impl Decoder {
 
     fn handle_literal_field<'a: 'b, 'b>(
         &'a mut self,
-        field: field::LiteralHeaderField<&'b [u8], &'b [u8]>,
+        field: LiteralHeaderField<&'b [u8], &'b [u8]>,
     ) -> Result<HeaderField<'b>> {
-        if let field::LiteralFieldForm::WithIndexing = field.form {
+        if let LiteralFieldForm::WithIndexing = field.form {
             let name = match field.name {
-                field::FieldName::Index(index) => track!(self.table.get(index))?.name.to_owned(),
-                field::FieldName::Name(ref name) => track!(name.to_cow_str())?.into_owned(),
+                FieldName::Index(index) => track!(self.table.get(index))?.name.to_owned(),
+                FieldName::Name(ref name) => track!(name.to_cow_str())?.into_owned(),
             };
             let value = track!(field.value.to_cow_str())?.into_owned();
 
@@ -67,10 +71,8 @@ impl Decoder {
             }
         } else {
             let name = match field.name {
-                field::FieldName::Index(index) => {
-                    Cow::Borrowed(track!(self.table.get(index))?.name)
-                }
-                field::FieldName::Name(ref name) => track!(name.to_cow_str())?,
+                FieldName::Index(index) => Cow::Borrowed(track!(self.table.get(index))?.name),
+                FieldName::Name(ref name) => track!(name.to_cow_str())?,
             };
             let value = track!(field.value.to_cow_str())?;
             Ok(HeaderField { name, value })
@@ -80,7 +82,7 @@ impl Decoder {
 
 #[cfg(test)]
 mod test {
-    use field::Reader;
+    use io::SliceReader;
     use super::*;
 
     #[test]
@@ -97,7 +99,7 @@ mod test {
                     0x6d, 0x2d, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
                 ];
             }
-            let mut reader = Reader::new(&data[..]);
+            let mut reader = SliceReader::new(&data[..]);
             let field = track_try_unwrap!(decoder.decode(&mut reader));
             assert!(reader.eos());
             assert_eq!(field.name.as_ref(), b"custom-key");
@@ -122,7 +124,7 @@ mod test {
                     0x6c, 0x65, 0x2f, 0x70, 0x61, 0x74, 0x68
                 ];
             }
-            let mut reader = Reader::new(&data[..]);
+            let mut reader = SliceReader::new(&data[..]);
             let field = track_try_unwrap!(decoder.decode(&mut reader));
             assert!(reader.eos());
             assert_eq!(field.name.as_ref(), b":path");
@@ -144,7 +146,7 @@ mod test {
                     0x64, 0x06, 0x73, 0x65, 0x63, 0x72, 0x65, 0x74
                 ];
             }
-            let mut reader = Reader::new(&data[..]);
+            let mut reader = SliceReader::new(&data[..]);
             let field = track_try_unwrap!(decoder.decode(&mut reader));
             assert!(reader.eos());
             assert_eq!(field.name.as_ref(), b"password");
@@ -159,7 +161,7 @@ mod test {
         let mut decoder = Decoder::new(4096);
         {
             let data = [0x82];
-            let mut reader = Reader::new(&data[..]);
+            let mut reader = SliceReader::new(&data[..]);
             let field = track_try_unwrap!(decoder.decode(&mut reader));
             assert!(reader.eos());
             assert_eq!(field.name.as_ref(), b":method");

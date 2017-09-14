@@ -3,7 +3,6 @@ extern crate byteorder;
 extern crate trackable;
 
 pub use encoder::{Encoder, HeaderBlockEncoder};
-pub use name::Name;
 
 macro_rules! track_io {
     ($e:expr) => {
@@ -14,14 +13,15 @@ macro_rules! track_io {
     }
 }
 
+pub mod field;
 pub mod table;
 
-pub mod decoder; // TODO: private
+mod decoder;
 mod encoder;
-pub mod huffman; // TODO: private
-pub mod field; // TODO: private
+mod huffman;
+mod io;
 pub mod literal; // TODO: private
-mod name;
+mod signal;
 
 pub type Error = trackable::error::TrackableError<trackable::error::Failed>;
 pub type Result<T> = ::std::result::Result<T, Error>;

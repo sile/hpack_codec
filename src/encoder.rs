@@ -1,8 +1,9 @@
 use std::io::Write;
 
 use Result;
-use field;
-use table::{Table, Index};
+use field::{HeaderField, FieldName, LiteralFieldForm};
+use signal::DynamicTableSizeUpdate;
+use table::Table;
 
 #[derive(Debug)]
 pub struct Encoder {
@@ -36,10 +37,8 @@ impl Encoder {
     }
     pub fn enter_header_block<W: Write>(&mut self, mut writer: W) -> Result<HeaderBlockEncoder<W>> {
         for max_size in self.dynamic_table_size_updates.drain(..) {
-            let entry = field::HeaderField::Update::<Vec<u8>, Vec<u8>>(
-                field::DynamicTableSizeUpdate { max_size },
-            );
-            track!(entry.encode(&mut writer))?;
+            let update = DynamicTableSizeUpdate { max_size };
+            track!(update.encode(&mut writer))?;
         }
         Ok(HeaderBlockEncoder {
             table: &mut self.table,
@@ -57,37 +56,31 @@ impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
     pub fn table(&self) -> &Table {
         &self.table
     }
-
-    pub fn encode_indexed_header_field(&mut self, index: u16) -> Result<()> {
-        track!(self.table.validate_index(Index::new(index).expect("TODO")))?;
-        let field = field::HeaderField::Indexed::<Vec<u8>, Vec<u8>>(field::IndexedHeaderField {
-            index: Index::new(index).expect("TODO"),
-        });
-        track!(field.encode(&mut self.writer))?;
-        Ok(())
-    }
-
-    pub fn encode_literal_header_field<N, V>(
-        &mut self,
-        field: field::LiteralHeaderField<N, V>,
-    ) -> Result<()>
+    pub fn encode_field<'b, F>(&'b mut self, field: F) -> Result<()>
     where
-        N: AsRef<[u8]>,
-        V: AsRef<[u8]>,
+        F: Into<HeaderField<'b>>,
     {
-        if let field::FieldName::Index(index) = field.name {
-            track!(self.table.validate_index(index))?;
-        };
-        if let field::LiteralFieldForm::WithIndexing = field.form {
-            let name = match field.name {
-                field::FieldName::Index(index) => {
-                    let entry = track!(self.table.get(index))?;
-                    entry.name.to_owned()
+        let field = field.into();
+        match field {
+            HeaderField::Indexed(ref field) => {
+                track!(self.table.validate_index(field.index()))?;
+            }
+            HeaderField::Literal(ref field) => {
+                if let FieldName::Index(index) = field.name {
+                    track!(self.table.validate_index(index))?;
+                };
+                if let LiteralFieldForm::WithIndexing = field.form {
+                    let name = match field.name {
+                        FieldName::Index(index) => {
+                            let entry = track!(self.table.get(index))?;
+                            entry.name.to_owned()
+                        }
+                        FieldName::Name(ref name) => track!(name.to_vec())?,
+                    };
+                    let value = track!(field.value.to_vec())?;
+                    self.table.dynamic_mut().push(name, value);
                 }
-                field::FieldName::Name(ref name) => track!(name.to_vec())?,
-            };
-            let value = track!(field.value.to_vec())?;
-            self.table.dynamic_mut().push(name, value);
+            }
         }
         track!(field.encode(&mut self.writer))?;
         Ok(())
