@@ -62,7 +62,7 @@ impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
             track!(HeaderField::decode(&mut self.reader)).map(Some)
         }
     }
-    pub fn decode_plain_field(&mut self) -> Result<Option<PlainHeaderField<'a>>> {
+    pub fn decode_plain_field<'c>(&'c mut self) -> Result<Option<PlainHeaderField<'c>>> {
         if let Some(field) = track!(self.decode_field())? {
             let result = match field {
                 HeaderField::Indexed(f) => track!(Self::handle_indexed_field(self.table, f)),
@@ -160,62 +160,56 @@ mod test {
         assert_eq!(decoder.table.dynamic().entries()[0].value, b"custom-header");
     }
 
-    // #[test]
-    // /// https://tools.ietf.org/html/rfc7541#appendix-C.2.2
-    // fn literal_header_field_without_indexing() {
-    //     let mut decoder = Decoder::new(4096);
-    //     {
-    //         let data;
-    //         #[cfg_attr(rustfmt, rustfmt_skip)]
-    //         {
-    //             data = [
-    //                 0x04, 0x0c, 0x2f, 0x73, 0x61, 0x6d, 0x70,
-    //                 0x6c, 0x65, 0x2f, 0x70, 0x61, 0x74, 0x68
-    //             ];
-    //         }
-    //         let mut reader = SliceReader::new(&data[..]);
-    //         let field = track_try_unwrap!(decoder.decode(&mut reader));
-    //         assert!(reader.eos());
-    //         assert_eq!(field.name.as_ref(), b":path");
-    //         assert_eq!(field.value.as_ref(), b"/sample/path");
-    //     }
-    //     assert_eq!(decoder.table.dynamic().entries().len(), 0);
-    // }
+    #[test]
+    /// https://tools.ietf.org/html/rfc7541#appendix-C.2.2
+    fn literal_header_field_without_indexing() {
+        let mut decoder = Decoder::new(4096);
+        {
+            let data;
+            #[cfg_attr(rustfmt, rustfmt_skip)]
+            {
+                data = [
+                    0x04, 0x0c, 0x2f, 0x73, 0x61, 0x6d, 0x70,
+                    0x6c, 0x65, 0x2f, 0x70, 0x61, 0x74, 0x68
+                ];
+            }
+            let mut block = track_try_unwrap!(decoder.enter_header_block(&data[..]));
+            assert_decode!(block, b":path", b"/sample/path");
+            assert!(block.eos());
+        }
+        assert_eq!(decoder.table.dynamic().entries().len(), 0);
+    }
 
-    // #[test]
-    // /// https://tools.ietf.org/html/rfc7541#appendix-C.2.3
-    // fn literal_header_field_never_indexed() {
-    //     let mut decoder = Decoder::new(4096);
-    //     {
-    //         let data;
-    //         #[cfg_attr(rustfmt, rustfmt_skip)]
-    //         {
-    //             data = [
-    //                 0x10, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72,
-    //                 0x64, 0x06, 0x73, 0x65, 0x63, 0x72, 0x65, 0x74
-    //             ];
-    //         }
-    //         let mut reader = SliceReader::new(&data[..]);
-    //         let field = track_try_unwrap!(decoder.decode(&mut reader));
-    //         assert!(reader.eos());
-    //         assert_eq!(field.name.as_ref(), b"password");
-    //         assert_eq!(field.value.as_ref(), b"secret");
-    //     }
-    //     assert_eq!(decoder.table.dynamic().entries().len(), 0);
-    // }
+    #[test]
+    /// https://tools.ietf.org/html/rfc7541#appendix-C.2.3
+    fn literal_header_field_never_indexed() {
+        let mut decoder = Decoder::new(4096);
+        {
+            let data;
+            #[cfg_attr(rustfmt, rustfmt_skip)]
+            {
+                data = [
+                    0x10, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72,
+                    0x64, 0x06, 0x73, 0x65, 0x63, 0x72, 0x65, 0x74
+                ];
+            }
+            let mut block = track_try_unwrap!(decoder.enter_header_block(&data[..]));
+            assert_decode!(block, b"password", b"secret");
+            assert!(block.eos());
+        }
+        assert_eq!(decoder.table.dynamic().entries().len(), 0);
+    }
 
-    // #[test]
-    // /// https://tools.ietf.org/html/rfc7541#appendix-C.2.4
-    // fn indexed_header_field() {
-    //     let mut decoder = Decoder::new(4096);
-    //     {
-    //         let data = [0x82];
-    //         let mut reader = SliceReader::new(&data[..]);
-    //         let field = track_try_unwrap!(decoder.decode(&mut reader));
-    //         assert!(reader.eos());
-    //         assert_eq!(field.name.as_ref(), b":method");
-    //         assert_eq!(field.value.as_ref(), b"GET");
-    //     }
-    //     assert!(decoder.table.dynamic().entries().is_empty());
-    // }
+    #[test]
+    /// https://tools.ietf.org/html/rfc7541#appendix-C.2.4
+    fn indexed_header_field() {
+        let mut decoder = Decoder::new(4096);
+        {
+            let data = [0x82];
+            let mut block = track_try_unwrap!(decoder.enter_header_block(&data[..]));
+            assert_decode!(block, b":method", b"GET");
+            assert!(block.eos());
+        }
+        assert!(decoder.table.dynamic().entries().is_empty());
+    }
 }

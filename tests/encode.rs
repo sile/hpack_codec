@@ -3,7 +3,7 @@ extern crate hpack_codec;
 extern crate trackable;
 
 use hpack_codec::Encoder;
-use hpack_codec::field2::LiteralHeaderField;
+use hpack_codec::field::LiteralHeaderField;
 use hpack_codec::table::{Table, StaticEntry, Index};
 
 #[test]
