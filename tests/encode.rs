@@ -4,12 +4,12 @@ extern crate trackable;
 
 use hpack_codec::Encoder;
 use hpack_codec::field::LiteralHeaderField;
-use hpack_codec::table::{Table, StaticEntry, Index};
+use hpack_codec::table::{StaticEntry, Index};
 
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.3
 fn request_examples_without_huffman_coding() {
-    let mut encoder = Encoder::new(Table::new(4096));
+    let mut encoder = Encoder::new(4096);
 
     // C.3.1. First Request
     {
@@ -90,7 +90,7 @@ fn request_examples_without_huffman_coding() {
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.4
 fn request_examples_with_huffman_coding() {
-    let mut encoder = Encoder::new(Table::new(4096));
+    let mut encoder = Encoder::new(4096);
 
     // C.4.1. First Request
     {
@@ -102,7 +102,7 @@ fn request_examples_with_huffman_coding() {
             block.encode_field(
                 LiteralHeaderField::with_indexed_name(StaticEntry::Authority, b"www.example.com")
                     .with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
 
@@ -129,7 +129,7 @@ fn request_examples_with_huffman_coding() {
             block.encode_field(
                 LiteralHeaderField::with_indexed_name(StaticEntry::CacheControl, b"no-cache")
                     .with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
 
@@ -155,8 +155,8 @@ fn request_examples_with_huffman_coding() {
             block.encode_field(
                 LiteralHeaderField::new(b"custom-key", b"custom-value")
                     .with_indexing()
-                    .huffman_encoded_name()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_name()
+                    .with_huffman_encoded_value(),
             )
         );
 
@@ -177,7 +177,7 @@ fn request_examples_with_huffman_coding() {
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.5
 fn response_examples_without_huffman_coding() {
-    let mut encoder = Encoder::new(Table::new(256));
+    let mut encoder = Encoder::new(256);
 
     // C.5.1. First Request
     {
@@ -302,7 +302,7 @@ fn response_examples_without_huffman_coding() {
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.6
 fn response_examples_with_huffman_coding() {
-    let mut encoder = Encoder::new(Table::new(256));
+    let mut encoder = Encoder::new(256);
 
     // C.6.1. First Request
     {
@@ -311,14 +311,14 @@ fn response_examples_with_huffman_coding() {
             block.encode_field(
                 LiteralHeaderField::with_indexed_name(StaticEntry::Status, b"302")
                     .with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
         track_try_unwrap!(
             block.encode_field(
                 LiteralHeaderField::with_indexed_name(StaticEntry::CacheControl, b"private")
                     .with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
         track_try_unwrap!(
@@ -327,7 +327,7 @@ fn response_examples_with_huffman_coding() {
                     StaticEntry::Date,
                     b"Mon, 21 Oct 2013 20:13:21 GMT",
                 ).with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
         track_try_unwrap!(
@@ -336,7 +336,7 @@ fn response_examples_with_huffman_coding() {
                     StaticEntry::Location,
                     b"https://www.example.com",
                 ).with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
 
@@ -362,7 +362,7 @@ fn response_examples_with_huffman_coding() {
             block.encode_field(
                 LiteralHeaderField::with_indexed_name(StaticEntry::Status, b"307")
                     .with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
         track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 3));
@@ -391,7 +391,7 @@ fn response_examples_with_huffman_coding() {
                     StaticEntry::Date,
                     b"Mon, 21 Oct 2013 20:13:22 GMT",
                 ).with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
         track_try_unwrap!(block.encode_field(Index::dynamic_table_offset() + 2));
@@ -399,7 +399,7 @@ fn response_examples_with_huffman_coding() {
             block.encode_field(
                 LiteralHeaderField::with_indexed_name(StaticEntry::ContentEncoding, b"gzip")
                     .with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
         track_try_unwrap!(
@@ -408,7 +408,7 @@ fn response_examples_with_huffman_coding() {
                     StaticEntry::SetCookie,
                     &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..],
                 ).with_indexing()
-                    .huffman_encoded_value(),
+                    .with_huffman_encoded_value(),
             )
         );
 

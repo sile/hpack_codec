@@ -1,7 +1,8 @@
+use std::borrow::Cow;
 use std::io::Write;
 
 use Result;
-use field::{HeaderField, FieldName, LiteralFieldForm};
+use field::{RawHeaderField, FieldName, LiteralFieldForm};
 use signal::DynamicTableSizeUpdate;
 use table::Table;
 
@@ -11,9 +12,9 @@ pub struct Encoder {
     dynamic_table_size_updates: Vec<u16>,
 }
 impl Encoder {
-    pub fn new(table: Table) -> Self {
+    pub fn new(max_dynamic_table_size: u16) -> Self {
         Encoder {
-            table,
+            table: Table::new(max_dynamic_table_size),
             dynamic_table_size_updates: Vec::new(),
         }
     }
@@ -58,26 +59,26 @@ impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
     }
     pub fn encode_field<'b, F>(&'b mut self, field: F) -> Result<()>
     where
-        F: Into<HeaderField<'b>>,
+        F: Into<RawHeaderField<'b>>,
     {
         let field = field.into();
         match field {
-            HeaderField::Indexed(ref field) => {
+            RawHeaderField::Indexed(ref field) => {
                 track!(self.table.validate_index(field.index()))?;
             }
-            HeaderField::Literal(ref field) => {
-                if let FieldName::Index(index) = field.name {
+            RawHeaderField::Literal(ref field) => {
+                if let FieldName::Index(index) = *field.name() {
                     track!(self.table.validate_index(index))?;
                 };
-                if let LiteralFieldForm::WithIndexing = field.form {
-                    let name = match field.name {
+                if let LiteralFieldForm::WithIndexing = field.form() {
+                    let name = match *field.name() {
                         FieldName::Index(index) => {
                             let entry = track!(self.table.get(index))?;
-                            entry.name.to_owned()
+                            entry.name().to_owned()
                         }
                         FieldName::Name(ref name) => track!(name.to_vec())?,
                     };
-                    let value = track!(field.value.to_vec())?;
+                    let value = track!(field.value().to_vec())?;
                     self.table.dynamic_mut().push(name, value);
                 }
             }

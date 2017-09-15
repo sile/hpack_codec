@@ -8,7 +8,7 @@ use Result;
 use huffman;
 use io::SliceReader;
 
-pub fn encode_u16<W: Write>(
+pub(crate) fn encode_u16<W: Write>(
     mut writer: W,
     prepended_value: u8,
     prefix_bits: u8,
@@ -32,7 +32,7 @@ pub fn encode_u16<W: Write>(
     Ok(())
 }
 
-pub fn decode_u16<R: Read>(mut reader: R, prefix_bits: u8) -> Result<(u8, u16)> {
+pub(crate) fn decode_u16<R: Read>(mut reader: R, prefix_bits: u8) -> Result<(u8, u16)> {
     debug_assert!(1 <= prefix_bits && prefix_bits <= 8);
     let max_prefix_value: u16 = (1 << prefix_bits) - 1;
     let first_octet = track_io!(reader.read_u8())?;
@@ -57,6 +57,7 @@ pub fn decode_u16<R: Read>(mut reader: R, prefix_bits: u8) -> Result<(u8, u16)> 
     Ok((prepended_value, value))
 }
 
+// TODO: private
 #[derive(Debug, Clone, Copy)]
 pub enum Encoding {
     Raw = 0,

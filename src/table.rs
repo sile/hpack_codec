@@ -1,8 +1,10 @@
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ops::{Add, AddAssign};
 use trackable::error::Failed;
 
 use Result;
+use field::HeaderField;
 
 #[derive(Debug)]
 pub struct Table {
@@ -18,7 +20,7 @@ impl Table {
     pub fn dynamic_mut(&mut self) -> &mut DynamicTable {
         &mut self.dynamic_table
     }
-    pub fn get(&self, index: Index) -> Result<Entry> {
+    pub fn get(&self, index: Index) -> Result<HeaderField> {
         if let Some(entry) = StaticEntry::from_index(index) {
             Ok(entry.into())
         } else {
@@ -30,7 +32,7 @@ impl Table {
                 "Too large index: {:?}",
                 index
             );
-            Ok(entry.as_ref())
+            Ok(entry.as_borrowed())
         }
     }
     pub fn len(&self) -> u16 {
@@ -53,7 +55,7 @@ impl Table {
 
 #[derive(Debug)]
 pub struct DynamicTable {
-    entries: VecDeque<OwnedEntry>,
+    entries: VecDeque<HeaderField<'static>>,
     size: u16,
     size_soft_limit: u16,
     size_hard_limit: u16,
@@ -67,7 +69,7 @@ impl DynamicTable {
             size_hard_limit: max_size,
         }
     }
-    pub fn entries(&self) -> &VecDeque<OwnedEntry> {
+    pub fn entries(&self) -> &VecDeque<HeaderField<'static>> {
         &self.entries
     }
     pub fn size(&self) -> u16 {
@@ -98,16 +100,16 @@ impl DynamicTable {
         Ok(())
     }
 
-    pub(crate) fn push(&mut self, name: Vec<u8>, value: Vec<u8>) -> Option<OwnedEntry> {
-        let entry = OwnedEntry { name, value };
-        let entry_size = entry.as_ref().size();
+    pub(crate) fn push(&mut self, name: Vec<u8>, value: Vec<u8>) -> Option<HeaderField<'static>> {
+        let field = HeaderField::from_cow(Cow::Owned(name), Cow::Owned(value));
+        let entry_size = field.entry_size();
         if self.size_soft_limit < entry_size {
             self.entries.clear();
-            Some(entry)
+            Some(field)
         } else {
             self.evict_exceeded_entries(entry_size);
             self.size += entry_size;
-            self.entries.push_front(entry);
+            self.entries.push_front(field);
             None
         }
     }
@@ -115,7 +117,7 @@ impl DynamicTable {
     fn evict_exceeded_entries(&mut self, new_entry_size: u16) {
         while self.size_soft_limit - new_entry_size < self.size {
             let evicted = self.entries.pop_back().expect("Never fails");
-            self.size -= evicted.as_ref().size();
+            self.size -= evicted.entry_size();
         }
     }
 }
@@ -217,104 +219,83 @@ impl From<StaticEntry> for Index {
         })
     }
 }
-
-#[derive(Debug)]
-pub struct Entry<'a> {
-    pub name: &'a [u8],
-    pub value: &'a [u8],
-}
-impl<'a> Entry<'a> {
-    pub fn size(&self) -> u16 {
-        (self.name.len() + self.value.len() + 32) as u16
-    }
-}
-impl From<StaticEntry> for Entry<'static> {
+impl From<StaticEntry> for HeaderField<'static> {
     fn from(f: StaticEntry) -> Self {
-        macro_rules! entry {
-            ($name:expr, $value: expr) => { Entry{ name: $name, value: $value } };
-            ($name:expr) => { Entry{ name: $name, value: b"" } }
+        macro_rules! field {
+            ($name:expr, $value: expr) => {
+                HeaderField::from_cow(Cow::Borrowed($name), Cow::Borrowed($value))
+            };
+            ($name:expr) => {
+                HeaderField::from_cow(Cow::Borrowed($name), Cow::Borrowed(b""))
+            }
         }
         match f {
-            StaticEntry::Authority => entry!(b":authority"),
-            StaticEntry::Method => entry!(b":method", b"GET"),
-            StaticEntry::MethodGet => entry!(b":method", b"GET"),            
-            StaticEntry::MethodPost => entry!(b":method", b"POST"),
-            StaticEntry::Path => entry!(b":path", b"/"),
-            StaticEntry::PathRoot => entry!(b":path", b"/"),            
-            StaticEntry::PathIndexHtml => entry!(b":path", b"/index.html"),
-            StaticEntry::Scheme => entry!(b":scheme", b"http"),
-            StaticEntry::SchemeHttp => entry!(b":scheme", b"http"),
-            StaticEntry::SchemeHttps => entry!(b":scheme", b"https"),
-            StaticEntry::Status => entry!(b":status", b"200"),
-            StaticEntry::Status200 => entry!(b":status", b"200"),            
-            StaticEntry::Status204 => entry!(b":status", b"204"),
-            StaticEntry::Status206 => entry!(b":status", b"206"),
-            StaticEntry::Status304 => entry!(b":status", b"304"),
-            StaticEntry::Status400 => entry!(b":status", b"400"),
-            StaticEntry::Status404 => entry!(b":status", b"404"),
-            StaticEntry::Status500 => entry!(b":status", b"500"),
-            StaticEntry::AcceptCharset => entry!(b"accept-charset"),
-            StaticEntry::AcceptEncoding => entry!(b"accept-encoding", b"gzip, deflate"),
-            StaticEntry::AcceptEncodingGzipDeflate => entry!(b"accept-encoding", b"gzip, deflate"),
-            StaticEntry::AcceptLanguage => entry!(b"accept-language"),
-            StaticEntry::AcceptRanges => entry!(b"accept-ranges"),
-            StaticEntry::Accept => entry!(b"accept"),
-            StaticEntry::AccessControlAllowOrigin => entry!(b"access-control-allow-origin"),
-            StaticEntry::Age => entry!(b"age"),
-            StaticEntry::Allow => entry!(b"allow"),
-            StaticEntry::Authorization => entry!(b"authorization"),
-            StaticEntry::CacheControl => entry!(b"cache-control"),
-            StaticEntry::ContentDisposition => entry!(b"content-disposition"),
-            StaticEntry::ContentEncoding => entry!(b"content-encoding"),
-            StaticEntry::ContentLanguage => entry!(b"content-language"),
-            StaticEntry::ContentLength => entry!(b"content-length"),
-            StaticEntry::ContentLocation => entry!(b"content-location"),
-            StaticEntry::ContentRange => entry!(b"content-range"),
-            StaticEntry::ContentType => entry!(b"content-type"),
-            StaticEntry::Cookie => entry!(b"cookie"),
-            StaticEntry::Date => entry!(b"date"),
-            StaticEntry::Etag => entry!(b"etag"),
-            StaticEntry::Expect => entry!(b"expect"),
-            StaticEntry::Expires => entry!(b"expires"),
-            StaticEntry::From => entry!(b"from"),
-            StaticEntry::Host => entry!(b"host"),
-            StaticEntry::IfMatch => entry!(b"if-match"),
-            StaticEntry::IfModifiedSince => entry!(b"if-modified-since"),
-            StaticEntry::IfNoneMatch => entry!(b"if-none-match"),
-            StaticEntry::IfRange => entry!(b"if-range"),
-            StaticEntry::IfUnmodifiedSince => entry!(b"if-unmodified-since"),
-            StaticEntry::LastModified => entry!(b"last-modified"),
-            StaticEntry::Link => entry!(b"link"),
-            StaticEntry::Location => entry!(b"location"),
-            StaticEntry::MaxForwards => entry!(b"max-forwards"),
-            StaticEntry::ProxyAuthenticate => entry!(b"proxy-authenticate"),
-            StaticEntry::ProxyAuthorization => entry!(b"proxy-authorization"),
-            StaticEntry::Range => entry!(b"range"),
-            StaticEntry::Referer => entry!(b"referer"),
-            StaticEntry::Refresh => entry!(b"refresh"),
-            StaticEntry::RetryAfter => entry!(b"retry-after"),
-            StaticEntry::Server => entry!(b"server"),
-            StaticEntry::SetCookie => entry!(b"set-cookie"),
-            StaticEntry::StrictTransportSecurity => entry!(b"strict-transport-security"),
-            StaticEntry::TransferEncoding => entry!(b"transfer-encoding"),
-            StaticEntry::UserAgent => entry!(b"user-agent"),
-            StaticEntry::Vary => entry!(b"vary"),
-            StaticEntry::Via => entry!(b"via"),
-            StaticEntry::WwwAuthenticate => entry!(b"www-authenticate"),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct OwnedEntry {
-    pub name: Vec<u8>,
-    pub value: Vec<u8>,
-}
-impl OwnedEntry {
-    pub fn as_ref(&self) -> Entry {
-        Entry {
-            name: &self.name,
-            value: &self.value,
+            StaticEntry::Authority => field!(b":authority"),
+            StaticEntry::Method => field!(b":method", b"GET"),
+            StaticEntry::MethodGet => field!(b":method", b"GET"),
+            StaticEntry::MethodPost => field!(b":method", b"POST"),
+            StaticEntry::Path => field!(b":path", b"/"),
+            StaticEntry::PathRoot => field!(b":path", b"/"),
+            StaticEntry::PathIndexHtml => field!(b":path", b"/index.html"),
+            StaticEntry::Scheme => field!(b":scheme", b"http"),
+            StaticEntry::SchemeHttp => field!(b":scheme", b"http"),
+            StaticEntry::SchemeHttps => field!(b":scheme", b"https"),
+            StaticEntry::Status => field!(b":status", b"200"),
+            StaticEntry::Status200 => field!(b":status", b"200"),
+            StaticEntry::Status204 => field!(b":status", b"204"),
+            StaticEntry::Status206 => field!(b":status", b"206"),
+            StaticEntry::Status304 => field!(b":status", b"304"),
+            StaticEntry::Status400 => field!(b":status", b"400"),
+            StaticEntry::Status404 => field!(b":status", b"404"),
+            StaticEntry::Status500 => field!(b":status", b"500"),
+            StaticEntry::AcceptCharset => field!(b"accept-charset"),
+            StaticEntry::AcceptEncoding => field!(b"accept-encoding", b"gzip, deflate"),
+            StaticEntry::AcceptEncodingGzipDeflate => field!(b"accept-encoding", b"gzip, deflate"),
+            StaticEntry::AcceptLanguage => field!(b"accept-language"),
+            StaticEntry::AcceptRanges => field!(b"accept-ranges"),
+            StaticEntry::Accept => field!(b"accept"),
+            StaticEntry::AccessControlAllowOrigin => field!(b"access-control-allow-origin"),
+            StaticEntry::Age => field!(b"age"),
+            StaticEntry::Allow => field!(b"allow"),
+            StaticEntry::Authorization => field!(b"authorization"),
+            StaticEntry::CacheControl => field!(b"cache-control"),
+            StaticEntry::ContentDisposition => field!(b"content-disposition"),
+            StaticEntry::ContentEncoding => field!(b"content-encoding"),
+            StaticEntry::ContentLanguage => field!(b"content-language"),
+            StaticEntry::ContentLength => field!(b"content-length"),
+            StaticEntry::ContentLocation => field!(b"content-location"),
+            StaticEntry::ContentRange => field!(b"content-range"),
+            StaticEntry::ContentType => field!(b"content-type"),
+            StaticEntry::Cookie => field!(b"cookie"),
+            StaticEntry::Date => field!(b"date"),
+            StaticEntry::Etag => field!(b"etag"),
+            StaticEntry::Expect => field!(b"expect"),
+            StaticEntry::Expires => field!(b"expires"),
+            StaticEntry::From => field!(b"from"),
+            StaticEntry::Host => field!(b"host"),
+            StaticEntry::IfMatch => field!(b"if-match"),
+            StaticEntry::IfModifiedSince => field!(b"if-modified-since"),
+            StaticEntry::IfNoneMatch => field!(b"if-none-match"),
+            StaticEntry::IfRange => field!(b"if-range"),
+            StaticEntry::IfUnmodifiedSince => field!(b"if-unmodified-since"),
+            StaticEntry::LastModified => field!(b"last-modified"),
+            StaticEntry::Link => field!(b"link"),
+            StaticEntry::Location => field!(b"location"),
+            StaticEntry::MaxForwards => field!(b"max-forwards"),
+            StaticEntry::ProxyAuthenticate => field!(b"proxy-authenticate"),
+            StaticEntry::ProxyAuthorization => field!(b"proxy-authorization"),
+            StaticEntry::Range => field!(b"range"),
+            StaticEntry::Referer => field!(b"referer"),
+            StaticEntry::Refresh => field!(b"refresh"),
+            StaticEntry::RetryAfter => field!(b"retry-after"),
+            StaticEntry::Server => field!(b"server"),
+            StaticEntry::SetCookie => field!(b"set-cookie"),
+            StaticEntry::StrictTransportSecurity => field!(b"strict-transport-security"),
+            StaticEntry::TransferEncoding => field!(b"transfer-encoding"),
+            StaticEntry::UserAgent => field!(b"user-agent"),
+            StaticEntry::Vary => field!(b"vary"),
+            StaticEntry::Via => field!(b"via"),
+            StaticEntry::WwwAuthenticate => field!(b"www-authenticate"),
         }
     }
 }

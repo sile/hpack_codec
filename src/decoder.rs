@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use trackable::error::Failed;
 
 use Result;
-use field::{HeaderField, PlainHeaderField, IndexedHeaderField, LiteralHeaderField,
-            LiteralFieldForm, FieldName};
+use field::{RawHeaderField, HeaderField, IndexedHeaderField, LiteralHeaderField, LiteralFieldForm,
+            FieldName};
 use io::SliceReader;
 use signal::DynamicTableSizeUpdate;
 use table::Table;
@@ -55,18 +55,18 @@ pub struct HeaderBlockDecoder<'a, 'b> {
     reader: SliceReader<'b>,
 }
 impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
-    pub fn decode_field(&mut self) -> Result<Option<HeaderField<'b>>> {
+    pub fn decode_raw_field(&mut self) -> Result<Option<RawHeaderField<'b>>> {
         if self.reader.eos() {
             Ok(None)
         } else {
-            track!(HeaderField::decode(&mut self.reader)).map(Some)
+            track!(RawHeaderField::decode(&mut self.reader)).map(Some)
         }
     }
-    pub fn decode_plain_field<'c>(&'c mut self) -> Result<Option<PlainHeaderField<'c>>> {
-        if let Some(field) = track!(self.decode_field())? {
+    pub fn decode_field<'c>(&'c mut self) -> Result<Option<HeaderField<'c>>> {
+        if let Some(field) = track!(self.decode_raw_field())? {
             let result = match field {
-                HeaderField::Indexed(f) => track!(Self::handle_indexed_field(self.table, f)),
-                HeaderField::Literal(f) => track!(Self::handle_literal_field(self.table, f)),
+                RawHeaderField::Indexed(f) => track!(Self::handle_indexed_field(self.table, f)),
+                RawHeaderField::Literal(f) => track!(Self::handle_literal_field(self.table, f)),
             };
             result.map(Some)
         } else {
@@ -81,43 +81,34 @@ impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
     fn handle_indexed_field(
         table: &'a mut Table,
         field: IndexedHeaderField,
-    ) -> Result<PlainHeaderField<'a>> {
-        let entry = track!(table.get(field.index()))?;
-        Ok(PlainHeaderField {
-            name: Cow::Borrowed(entry.name),
-            value: Cow::Borrowed(entry.value),
-        })
+    ) -> Result<HeaderField<'a>> {
+        track!(table.get(field.index()))
     }
     fn handle_literal_field(
         table: &'a mut Table,
         field: LiteralHeaderField<'b>,
-    ) -> Result<PlainHeaderField<'a>> {
-        if let LiteralFieldForm::WithIndexing = field.form {
-            let name = match field.name {
-                FieldName::Index(index) => track!(table.get(index))?.name.to_owned(),
+    ) -> Result<HeaderField<'a>> {
+        let (name, value, form) = field.unwrap();
+        if let LiteralFieldForm::WithIndexing = form {
+            let name = match name {
+                FieldName::Index(index) => track!(table.get(index))?.name().to_owned(),
                 FieldName::Name(name) => track!(name.into_raw())?.into_owned(),
             };
-            let value = track!(field.value.into_raw())?.into_owned();
+            let value = track!(value.into_raw())?.into_owned();
 
-            if let Some(entry) = table.dynamic_mut().push(name, value) {
-                Ok(PlainHeaderField {
-                    name: Cow::Owned(entry.name),
-                    value: Cow::Owned(entry.value),
-                })
+            if let Some(evicted) = table.dynamic_mut().push(name, value) {
+                Ok(evicted)
             } else {
-                let entry = table.dynamic().entries()[0].as_ref();
-                Ok(PlainHeaderField {
-                    name: Cow::Borrowed(entry.name),
-                    value: Cow::Borrowed(entry.value),
-                })
+                let field = table.dynamic().entries()[0].as_borrowed();
+                Ok(field)
             }
         } else {
-            let name = match field.name {
-                FieldName::Index(index) => Cow::Borrowed(track!(table.get(index))?.name),
+            let name = match name {
+                FieldName::Index(index) => track!(table.get(index))?.into_cow_name(),
                 FieldName::Name(name) => track!(name.into_raw())?,
             };
-            let value = track!(field.value.into_raw())?;
-            Ok(PlainHeaderField { name, value })
+            let value = track!(value.into_raw())?;
+            Ok(HeaderField::from_cow(name, value))
         }
     }
 }
@@ -129,9 +120,9 @@ mod test {
     macro_rules! assert_decode {
         ($decoder:expr, $key:expr, $value:expr) => {
             {
-                let field = track_try_unwrap!($decoder.decode_plain_field()).unwrap();
-                assert_eq!(field.name.as_ref(), $key);
-                assert_eq!(field.value.as_ref(), $value);
+                let field = track_try_unwrap!($decoder.decode_field()).unwrap();
+                assert_eq!(field.name(), $key);
+                assert_eq!(field.value(), $value);
             }
         }
     }
@@ -156,8 +147,11 @@ mod test {
         }
         assert_eq!(decoder.table.dynamic().entries().len(), 1);
         assert_eq!(decoder.table.dynamic().size(), 55);
-        assert_eq!(decoder.table.dynamic().entries()[0].name, b"custom-key");
-        assert_eq!(decoder.table.dynamic().entries()[0].value, b"custom-header");
+        assert_eq!(decoder.table.dynamic().entries()[0].name(), b"custom-key");
+        assert_eq!(
+            decoder.table.dynamic().entries()[0].value(),
+            b"custom-header"
+        );
     }
 
     #[test]

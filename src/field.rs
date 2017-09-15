@@ -1,3 +1,5 @@
+//! Header Field.
+use std;
 use std::borrow::Cow;
 use std::io::Write;
 use byteorder::WriteBytesExt;
@@ -8,28 +10,90 @@ use io::SliceReader;
 use literal::{self, HpackString, Encoding};
 use table::{Index, StaticEntry};
 
-#[derive(Debug)]
-pub struct PlainHeaderField<'a> {
-    pub name: Cow<'a, [u8]>,
-    pub value: Cow<'a, [u8]>,
+/// Header Field.
+///
+/// This is a name-value pair. Both the name and value are
+/// treated as opaque sequences of octets.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeaderField<'a> {
+    name: Cow<'a, [u8]>,
+    value: Cow<'a, [u8]>,
+}
+impl<'a> HeaderField<'a> {
+    /// Makes a new `HeaderField` instance.
+    ///
+    /// # Errors
+    ///
+    /// If the size of resulting header is too large, the function will returns an `Error`.
+    ///
+    /// The maximum size of a header (i.e., the sum of it's name and value) is `std::u16::MAX - 32`.
+    pub fn new(name: &'a [u8], value: &'a [u8]) -> Result<Self> {
+        let entry_size = name.len() + value.len() + 32;
+        track_assert!(
+            entry_size <= std::u16::MAX as usize,
+            Failed,
+            "Too large header field: {}",
+            entry_size
+        );
+        Ok(HeaderField {
+            name: Cow::Borrowed(name),
+            value: Cow::Borrowed(value),
+        })
+    }
+
+    /// Returns the name of this header field.
+    pub fn name(&self) -> &[u8] {
+        self.name.as_ref()
+    }
+
+    /// Returns the value of this header field.
+    pub fn value(&self) -> &[u8] {
+        self.value.as_ref()
+    }
+
+    /// Returns the entry size of this header field.
+    ///
+    /// See: [4.1.  Calculating Table Size](https://tools.ietf.org/html/rfc7541#section-4.1)
+    pub fn entry_size(&self) -> u16 {
+        (self.name.len() + self.value.len() + 32) as u16
+    }
+
+    pub(crate) fn from_cow(name: Cow<'a, [u8]>, value: Cow<'a, [u8]>) -> Self {
+        let entry_size = name.len() + value.len() + 32;
+        debug_assert!(entry_size <= std::u16::MAX as usize);
+        HeaderField { name, value }
+    }
+    pub(crate) fn into_cow_name(self) -> Cow<'a, [u8]> {
+        self.name
+    }
+    pub(crate) fn as_borrowed(&self) -> HeaderField {
+        HeaderField {
+            name: Cow::Borrowed(self.name.as_ref()),
+            value: Cow::Borrowed(self.value.as_ref()),
+        }
+    }
 }
 
+/// Raw representation of a header field.
+///
+/// See: [2.4.  Header Field Representation](https://tools.ietf.org/html/rfc7541#section-2.4)
 #[derive(Debug)]
-pub enum HeaderField<'a> {
+#[allow(missing_docs)]
+pub enum RawHeaderField<'a> {
     Indexed(IndexedHeaderField),
     Literal(LiteralHeaderField<'a>),
 }
-impl<'a> HeaderField<'a> {
-    pub fn encode<W: Write>(&self, writer: W) -> Result<()> {
+impl<'a> RawHeaderField<'a> {
+    pub(crate) fn encode<W: Write>(&self, writer: W) -> Result<()> {
         match *self {
-            HeaderField::Indexed(ref field) => track!(field.encode(writer)),
-            HeaderField::Literal(ref field) => track!(field.encode(writer)),
+            RawHeaderField::Indexed(ref field) => track!(field.encode(writer)),
+            RawHeaderField::Literal(ref field) => track!(field.encode(writer)),
         }
     }
-    pub fn decode(reader: &mut SliceReader<'a>) -> Result<Self> {
+    pub(crate) fn decode(reader: &mut SliceReader<'a>) -> Result<Self> {
         let octet = track_io!(reader.peek_u8())?;
         if octet >> 7 == 0b1 {
-            track!(IndexedHeaderField::decode(reader)).map(HeaderField::Indexed)
+            track!(IndexedHeaderField::decode(reader)).map(RawHeaderField::Indexed)
         } else if octet >> 5 == 0b001 {
             track_panic!(
                 Failed,
@@ -37,49 +101,72 @@ impl<'a> HeaderField<'a> {
             );
         } else {
             track!(LiteralHeaderField::decode(reader, octet).map(
-                HeaderField::Literal,
+                RawHeaderField::Literal,
             ))
         }
     }
 }
-impl<'a> From<StaticEntry> for HeaderField<'a> {
+impl<'a> From<StaticEntry> for RawHeaderField<'a> {
     fn from(f: StaticEntry) -> Self {
-        HeaderField::Indexed(IndexedHeaderField(Index::from(f)))
+        RawHeaderField::Indexed(IndexedHeaderField(Index::from(f)))
     }
 }
-impl<'a> From<Index> for HeaderField<'a> {
+impl<'a> From<Index> for RawHeaderField<'a> {
     fn from(f: Index) -> Self {
-        HeaderField::Indexed(IndexedHeaderField(f))
+        RawHeaderField::Indexed(IndexedHeaderField(f))
     }
 }
-impl<'a> From<LiteralHeaderField<'a>> for HeaderField<'a> {
+impl<'a> From<LiteralHeaderField<'a>> for RawHeaderField<'a> {
     fn from(f: LiteralHeaderField<'a>) -> Self {
-        HeaderField::Literal(f)
+        RawHeaderField::Literal(f)
     }
 }
 
+/// Indexed representation of a header field.
+///
+/// See: [6.1.  Indexed Header Field Representation](https://tools.ietf.org/html/rfc7541#section-6.1)
 #[derive(Debug)]
 pub struct IndexedHeaderField(Index);
 impl IndexedHeaderField {
+    /// Makes a new `IndexedHeaderField` instance.
+    pub fn new(index: Index) -> Self {
+        IndexedHeaderField(index)
+    }
+
+    /// Returns the index of this header field.
     pub fn index(&self) -> Index {
         self.0
     }
-    pub fn encode<W: Write>(&self, writer: W) -> Result<()> {
+
+    fn encode<W: Write>(&self, writer: W) -> Result<()> {
         track!(literal::encode_u16(writer, 1, 7, self.0.as_u16()))
     }
-    pub fn decode(reader: &mut SliceReader) -> Result<Self> {
+    fn decode(reader: &mut SliceReader) -> Result<Self> {
         let index = Index::new(track!(literal::decode_u16(reader, 7))?.1).expect("TODO");
         Ok(IndexedHeaderField(index))
     }
 }
 
+/// Literal representation of a header field.
+///
+/// See: [6.2.  Literal Header Field Representation](https://tools.ietf.org/html/rfc7541#section-6.2)
 #[derive(Debug)]
 pub struct LiteralHeaderField<'a> {
-    pub name: FieldName<'a>,
-    pub value: HpackString<Cow<'a, [u8]>>,
-    pub form: LiteralFieldForm,
+    name: FieldName<'a>,
+    value: HpackString<Cow<'a, [u8]>>,
+    form: LiteralFieldForm,
 }
 impl<'a> LiteralHeaderField<'a> {
+    /// Makes a new `LiteralHeaderField` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hpack_codec::field::{LiteralHeaderField, LiteralFieldForm};;
+    ///
+    /// let field = LiteralHeaderField::new(b"foo", b"bar");
+    /// assert_eq!(field.form(), LiteralFieldForm::WithoutIndexing);
+    /// ```
     pub fn new(name: &'a [u8], value: &'a [u8]) -> Self {
         LiteralHeaderField {
             name: FieldName::Name(HpackString::new_raw(Cow::Borrowed(name))),
@@ -87,6 +174,21 @@ impl<'a> LiteralHeaderField<'a> {
             form: LiteralFieldForm::WithoutIndexing,
         }
     }
+
+    /// Makes a new `LiteralHeaderField` instance with the specified indexed name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hpack_codec::field::{LiteralHeaderField, LiteralFieldForm};;
+    /// use hpack_codec::table::{Index, StaticEntry};
+    ///
+    /// // Uses an index of the static table.
+    /// let field = LiteralHeaderField::with_indexed_name(StaticEntry::Method, b"foo");
+    ///
+    /// // Uses an index of a dynamic table;
+    /// let field = LiteralHeaderField::with_indexed_name(Index::dynamic_table_offset() + 2, b"bar");
+    /// ```
     pub fn with_indexed_name<N>(name: N, value: &'a [u8]) -> Self
     where
         N: Into<Index>,
@@ -97,11 +199,21 @@ impl<'a> LiteralHeaderField<'a> {
             form: LiteralFieldForm::WithoutIndexing,
         }
     }
+
+    /// Specifies to index this header field into a dynamic table.
     pub fn with_indexing(mut self) -> Self {
         self.form = LiteralFieldForm::WithIndexing;
         self
     }
-    pub fn huffman_encoded_name(mut self) -> Self {
+
+    /// Specifies that this header field will be never indexed into a dynamic table.
+    pub fn never_indexed(mut self) -> Self {
+        self.form = LiteralFieldForm::NeverIndexed;
+        self
+    }
+
+    /// Encodes the name of this header field by huffman coding.
+    pub fn with_huffman_encoded_name(mut self) -> Self {
         if let FieldName::Name(name) = self.name {
             if let Encoding::Raw = name.encoding() {
                 self.name = FieldName::Name(HpackString::new_huffman(name.octets()).into_cow());
@@ -113,19 +225,39 @@ impl<'a> LiteralHeaderField<'a> {
             self
         }
     }
-    pub fn huffman_encoded_value(mut self) -> Self {
+
+    /// Encodes the value of this header field by huffman coding.
+    pub fn with_huffman_encoded_value(mut self) -> Self {
         if let Encoding::Raw = self.value.encoding() {
             self.value = HpackString::new_huffman(self.value.octets()).into_cow();
         }
         self
     }
 
-    pub fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
+    /// Returns the name of this header field.
+    pub fn name(&self) -> &FieldName {
+        &self.name
+    }
+
+    /// Returns the value of this header field.
+    pub fn value(&self) -> &HpackString<Cow<'a, [u8]>> {
+        &self.value
+    }
+
+    /// Returns the form of this header field.
+    pub fn form(&self) -> LiteralFieldForm {
+        self.form
+    }
+
+    pub(crate) fn unwrap(self) -> (FieldName<'a>, HpackString<Cow<'a, [u8]>>, LiteralFieldForm) {
+        (self.name, self.value, self.form)
+    }
+    fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
         track!(self.encode_name(&mut writer))?;
         track!(self.value.encode(writer))
     }
 
-    pub fn decode(reader: &mut SliceReader<'a>, first_octet: u8) -> Result<Self> {
+    fn decode(reader: &mut SliceReader<'a>, first_octet: u8) -> Result<Self> {
         let (name, form) = track!(Self::decode_name_and_form(reader, first_octet))?;
         let value = track!(HpackString::decode(reader))?;
         Ok(LiteralHeaderField { name, value, form })
@@ -197,14 +329,24 @@ impl<'a> LiteralHeaderField<'a> {
     }
 }
 
+/// Available forms of literal header fields.
+///
+/// See: [6.2.  Literal Header Field Representation](https://tools.ietf.org/html/rfc7541#section-6.2)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiteralFieldForm {
+    /// See: [6.2.1.  Literal Header Field with Incremental Indexing](https://tools.ietf.org/html/rfc7541#section-6.2.1)
     WithIndexing,
+
+    /// See: [6.2.2.  Literal Header Field without Indexing](https://tools.ietf.org/html/rfc7541#section-6.2.2)
     WithoutIndexing,
+
+    /// See: [6.2.3.  Literal Header Field Never Indexed](https://tools.ietf.org/html/rfc7541#section-6.2.3)
     NeverIndexed,
 }
 
+/// The name of a header field.
 #[derive(Debug)]
+#[allow(missing_docs)]
 pub enum FieldName<'a> {
     Index(Index),
     Name(HpackString<Cow<'a, [u8]>>),

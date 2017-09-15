@@ -7,9 +7,9 @@ use hpack_codec::Decoder;
 macro_rules! assert_decode {
     ($decoder:expr, $key:expr, $value:expr) => {
         {
-            let field = track_try_unwrap!($decoder.decode_plain_field()).unwrap();
-            assert_eq!(field.name.as_ref(), $key);
-            assert_eq!(field.value.as_ref(), $value);
+            let field = track_try_unwrap!($decoder.decode_field()).unwrap();
+            assert_eq!(field.name(), $key);
+            assert_eq!(field.value(), $value);
         }
     }
 }
