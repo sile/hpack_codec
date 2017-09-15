@@ -76,9 +76,9 @@ impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
                             let entry = track!(self.table.get(index))?;
                             entry.name().to_owned()
                         }
-                        FieldName::Name(ref name) => track!(name.to_vec())?,
+                        FieldName::Name(ref name) => track!(name.to_plain_bytes())?.into_owned(),
                     };
-                    let value = track!(field.value().to_vec())?;
+                    let value = track!(field.value().to_plain_bytes())?.into_owned();
                     self.table.dynamic_mut().push(name, value);
                 }
             }

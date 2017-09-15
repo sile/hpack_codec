@@ -1,3 +1,4 @@
+//! Literal types.
 use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::u16;
@@ -57,105 +58,52 @@ pub(crate) fn decode_u16<R: Read>(mut reader: R, prefix_bits: u8) -> Result<(u8,
     Ok((prepended_value, value))
 }
 
-// TODO: private
-#[derive(Debug, Clone, Copy)]
-pub enum Encoding {
-    Raw = 0,
-    Huffman = 1,
-}
-
+/// HPACK String type.
+///
+/// A string literal is encoded as a sequence of
+/// octets, either by directly encoding the string literal's octets or by
+/// using a Huffman code.
+///
+/// See: [5.2.  String Literal Representation](https://tools.ietf.org/html/rfc7541#section-5.2)
 #[derive(Debug)]
-pub struct HpackString<B> {
-    encoding: Encoding,
-    octets: B, // TODO: cow
+#[allow(missing_docs)]
+pub enum HpackString<'a> {
+    Plain(Cow<'a, [u8]>),
+    Huffman(Cow<'a, [u8]>),
 }
-impl<B> HpackString<B>
-where
-    B: AsRef<[u8]>,
-{
-    pub fn encoding(&self) -> Encoding {
-        self.encoding
-    }
-    // TODO: #[cfg(test)]
-    pub fn octets(&self) -> &[u8] {
-        self.octets.as_ref()
-    }
-    pub fn new_raw(octets: B) -> Self {
-        HpackString {
-            encoding: Encoding::Raw,
-            octets,
+impl<'a> HpackString<'a> {
+    pub(crate) fn to_plain_bytes(&self) -> Result<Cow<[u8]>> {
+        match *self {
+            HpackString::Plain(ref x) => Ok(Cow::Borrowed(x.as_ref())),
+            HpackString::Huffman(ref x) => Ok(Cow::Owned(track!(huffman::decode(x))?)),
         }
     }
-    pub fn new_huffman(octets: B) -> HpackString<Vec<u8>> {
-        let encoded = huffman::encode(octets.as_ref());
-        HpackString {
-            encoding: Encoding::Huffman,
-            octets: encoded,
+    pub(crate) fn into_plain_bytes(self) -> Result<Cow<'a, [u8]>> {
+        match self {
+            HpackString::Plain(x) => Ok(x),
+            HpackString::Huffman(x) => Ok(Cow::Owned(track!(huffman::decode(x.as_ref()))?)),
         }
     }
-    pub fn as_ref(&self) -> HpackString<&[u8]> {
-        HpackString {
-            encoding: self.encoding,
-            octets: self.octets.as_ref(),
-        }
-    }
-    pub fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
-        debug_assert!(self.octets.as_ref().len() <= u16::MAX as usize);
-        track!(encode_u16(
-            &mut writer,
-            self.encoding as u8,
-            7,
-            self.octets.as_ref().len() as u16,
-        ))?;
-        track_io!(writer.write_all(self.octets.as_ref()))?;
+    pub(crate) fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
+        let (encoding, octets) = match *self {
+            HpackString::Plain(ref x) => (0, x.as_ref()),
+            HpackString::Huffman(ref x) => (1, x.as_ref()),
+        };
+        debug_assert!(octets.len() <= u16::MAX as usize);
+        track!(encode_u16(&mut writer, encoding, 7, octets.len() as u16))?;
+        track_io!(writer.write_all(octets))?;
         Ok(())
     }
-    pub fn to_vec(&self) -> Result<Vec<u8>> {
-        if let Encoding::Raw = self.encoding {
-            Ok(self.octets.as_ref().to_owned())
-        } else {
-            track!(huffman::decode(self.octets.as_ref()))
-        }
-    }
-}
-impl HpackString<Vec<u8>> {
-    pub fn into_cow(self) -> HpackString<Cow<'static, [u8]>> {
-        HpackString {
-            encoding: self.encoding,
-            octets: Cow::Owned(self.octets),
-        }
-    }
-}
-impl<'a> HpackString<&'a [u8]> {
-    pub fn new(octets: &'a [u8], encoding: Encoding) -> HpackString<Cow<'a, [u8]>> {
-        let octets = match encoding {
-            Encoding::Raw => Cow::Borrowed(octets),
-            Encoding::Huffman => Cow::Owned(huffman::encode(octets)),
-        };
-        HpackString { encoding, octets }
-    }
-}
-impl<'a> HpackString<Cow<'a, [u8]>> {
-    pub fn into_raw(self) -> Result<Cow<'a, [u8]>> {
-        if let Encoding::Raw = self.encoding {
-            Ok(self.octets)
-        } else {
-            let octets = track!(huffman::decode(self.octets.as_ref()))?;
-            Ok(Cow::Owned(octets))
-        }
-    }
-    pub fn decode(mut reader: &mut SliceReader<'a>) -> Result<Self> {
+    pub(crate) fn decode(mut reader: &mut SliceReader<'a>) -> Result<Self> {
         let (encoding, octets_len) = track!(decode_u16(&mut reader, 7))?;
         let octets = Cow::Borrowed(track!(reader.read_slice(octets_len as usize))?);
-        let encoding = if encoding == 0 {
-            Encoding::Raw
+        if encoding == 0 {
+            Ok(HpackString::Plain(octets))
         } else {
-            Encoding::Huffman
-        };
-        Ok(HpackString { encoding, octets })
+            Ok(HpackString::Huffman(octets))
+        }
     }
 }
-
 
 #[cfg(test)]
 mod test {

@@ -92,9 +92,9 @@ impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
         if let LiteralFieldForm::WithIndexing = form {
             let name = match name {
                 FieldName::Index(index) => track!(table.get(index))?.name().to_owned(),
-                FieldName::Name(name) => track!(name.into_raw())?.into_owned(),
+                FieldName::Name(name) => track!(name.into_plain_bytes())?.into_owned(),
             };
-            let value = track!(value.into_raw())?.into_owned();
+            let value = track!(value.into_plain_bytes())?.into_owned();
 
             if let Some(evicted) = table.dynamic_mut().push(name, value) {
                 Ok(evicted)
@@ -105,9 +105,9 @@ impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
         } else {
             let name = match name {
                 FieldName::Index(index) => track!(table.get(index))?.into_cow_name(),
-                FieldName::Name(name) => track!(name.into_raw())?,
+                FieldName::Name(name) => track!(name.into_plain_bytes())?,
             };
-            let value = track!(value.into_raw())?;
+            let value = track!(value.into_plain_bytes())?;
             Ok(HeaderField::from_cow(name, value))
         }
     }

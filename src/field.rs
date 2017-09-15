@@ -6,8 +6,9 @@ use byteorder::WriteBytesExt;
 use trackable::error::Failed;
 
 use Result;
+use huffman;
 use io::SliceReader;
-use literal::{self, HpackString, Encoding};
+use literal::{self, HpackString};
 use table::{Index, StaticEntry};
 
 /// Header Field.
@@ -153,7 +154,7 @@ impl IndexedHeaderField {
 #[derive(Debug)]
 pub struct LiteralHeaderField<'a> {
     name: FieldName<'a>,
-    value: HpackString<Cow<'a, [u8]>>,
+    value: HpackString<'a>,
     form: LiteralFieldForm,
 }
 impl<'a> LiteralHeaderField<'a> {
@@ -169,8 +170,8 @@ impl<'a> LiteralHeaderField<'a> {
     /// ```
     pub fn new(name: &'a [u8], value: &'a [u8]) -> Self {
         LiteralHeaderField {
-            name: FieldName::Name(HpackString::new_raw(Cow::Borrowed(name))),
-            value: HpackString::new_raw(Cow::Borrowed(value)),
+            name: FieldName::Name(HpackString::Plain(Cow::Borrowed(name))),
+            value: HpackString::Plain(Cow::Borrowed(value)),
             form: LiteralFieldForm::WithoutIndexing,
         }
     }
@@ -195,7 +196,7 @@ impl<'a> LiteralHeaderField<'a> {
     {
         LiteralHeaderField {
             name: FieldName::Index(name.into()),
-            value: HpackString::new_raw(Cow::Borrowed(value)),
+            value: HpackString::Plain(Cow::Borrowed(value)),
             form: LiteralFieldForm::WithoutIndexing,
         }
     }
@@ -214,12 +215,8 @@ impl<'a> LiteralHeaderField<'a> {
 
     /// Encodes the name of this header field by huffman coding.
     pub fn with_huffman_encoded_name(mut self) -> Self {
-        if let FieldName::Name(name) = self.name {
-            if let Encoding::Raw = name.encoding() {
-                self.name = FieldName::Name(HpackString::new_huffman(name.octets()).into_cow());
-            } else {
-                self.name = FieldName::Name(name);
-            }
+        if let FieldName::Name(HpackString::Plain(name)) = self.name {
+            self.name = FieldName::Name(HpackString::Huffman(Cow::Owned(huffman::encode(&name))));
             self
         } else {
             self
@@ -228,8 +225,8 @@ impl<'a> LiteralHeaderField<'a> {
 
     /// Encodes the value of this header field by huffman coding.
     pub fn with_huffman_encoded_value(mut self) -> Self {
-        if let Encoding::Raw = self.value.encoding() {
-            self.value = HpackString::new_huffman(self.value.octets()).into_cow();
+        if let HpackString::Plain(value) = self.value {
+            self.value = HpackString::Huffman(Cow::Owned(huffman::encode(&value)));
         }
         self
     }
@@ -240,7 +237,7 @@ impl<'a> LiteralHeaderField<'a> {
     }
 
     /// Returns the value of this header field.
-    pub fn value(&self) -> &HpackString<Cow<'a, [u8]>> {
+    pub fn value(&self) -> &HpackString {
         &self.value
     }
 
@@ -249,7 +246,7 @@ impl<'a> LiteralHeaderField<'a> {
         self.form
     }
 
-    pub(crate) fn unwrap(self) -> (FieldName<'a>, HpackString<Cow<'a, [u8]>>, LiteralFieldForm) {
+    pub(crate) fn unwrap(self) -> (FieldName<'a>, HpackString<'a>, LiteralFieldForm) {
         (self.name, self.value, self.form)
     }
     fn encode<W: Write>(&self, mut writer: W) -> Result<()> {
@@ -349,5 +346,5 @@ pub enum LiteralFieldForm {
 #[allow(missing_docs)]
 pub enum FieldName<'a> {
     Index(Index),
-    Name(HpackString<Cow<'a, [u8]>>),
+    Name(HpackString<'a>),
 }
