@@ -1,3 +1,6 @@
+//! Header Field Table.
+//!
+//! See: [2.3.  Indexing Tables](https://tools.ietf.org/html/rfc7541#section-2.3)
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ops::{Add, AddAssign};
@@ -6,20 +9,34 @@ use trackable::error::Failed;
 use Result;
 use field::HeaderField;
 
+/// Table for associating header fields to indexes.
+///
+/// See: [2.3.  Indexing Tables](https://tools.ietf.org/html/rfc7541#section-2.3)
 #[derive(Debug)]
 pub struct Table {
     dynamic_table: DynamicTable,
 }
 impl Table {
+    /// Makes a new `Table` instance.
     pub fn new(max_dynamic_table_size: u16) -> Self {
         Table { dynamic_table: DynamicTable::new(max_dynamic_table_size) }
     }
+
+    /// Returns the reference to `DynamicTable` instance.
     pub fn dynamic(&self) -> &DynamicTable {
         &self.dynamic_table
     }
+
+    /// Returns the mutable reference to the `DynamicTable` instance.
     pub fn dynamic_mut(&mut self) -> &mut DynamicTable {
         &mut self.dynamic_table
     }
+
+    /// Returns the entry associated with the specified index.
+    ///
+    /// # Errors
+    ///
+    /// If `index` value is too large, an error will be returned.
     pub fn get(&self, index: Index) -> Result<HeaderField> {
         if let Some(entry) = StaticEntry::from_index(index) {
             Ok(entry.into())
@@ -35,6 +52,8 @@ impl Table {
             Ok(entry.as_borrowed())
         }
     }
+
+    /// Returns the number of indexed entries.
     pub fn len(&self) -> u16 {
         (StaticEntry::entries_count() + self.dynamic_table.entries().len()) as u16
     }
@@ -53,6 +72,9 @@ impl Table {
     }
 }
 
+/// Dynamic Indexing Table.
+///
+/// See: [2.3.2.  Dynamic Table](https://tools.ietf.org/html/rfc7541#section-2.3.2)
 #[derive(Debug)]
 pub struct DynamicTable {
     entries: VecDeque<HeaderField<'static>>,
@@ -69,24 +91,48 @@ impl DynamicTable {
             size_hard_limit: max_size,
         }
     }
+
+    /// Returns the reference to the dynamically indexed entries
     pub fn entries(&self) -> &VecDeque<HeaderField<'static>> {
         &self.entries
     }
+
+    /// Returns the size of this table.
+    ///
+    /// See: [4.1.  Calculating Table Size](https://tools.ietf.org/html/rfc7541#section-4.1)
     pub fn size(&self) -> u16 {
         self.size
     }
-    pub fn size_soft_limit(&self) -> u16 {
-        self.size_soft_limit
-    }
+
+    /// Returns the hard limit of the size of this table.
+    ///
+    /// See: [4.2.  Maximum Table Size](https://tools.ietf.org/html/rfc7541#section-4.2)
     pub fn size_hard_limit(&self) -> u16 {
         self.size_hard_limit
     }
+
+    /// Returns the soft limit of the size of this table.
+    ///
+    /// See: [4.2.  Maximum Table Size](https://tools.ietf.org/html/rfc7541#section-4.2)
+    pub fn size_soft_limit(&self) -> u16 {
+        self.size_soft_limit
+    }
+
+    /// Sets the hard limit of the size of this table.
+    ///
+    /// Note that the soft limit will be truncated to `max_size` if it is greater than `max_size`.
     pub fn set_size_hard_limit(&mut self, max_size: u16) {
         self.size_hard_limit = max_size;
         if self.size_hard_limit < self.size_soft_limit {
             self.set_size_soft_limit(max_size).expect("Never fails");
         }
     }
+
+    /// Sets the soft limit of the size of this table.
+    ///
+    /// # Errors
+    ///
+    /// If `max_size` exceeds the hard limit of this table, an error will be returned.
     pub fn set_size_soft_limit(&mut self, max_size: u16) -> Result<()> {
         track_assert!(
             max_size <= self.size_hard_limit,
@@ -122,16 +168,44 @@ impl DynamicTable {
     }
 }
 
+/// Entry Index.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Index(u16);
 impl Index {
+    /// Makes a new `Index` instance.
+    ///
+    /// The value of `index` must be greater than zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hpack_codec::table::Index;
+    ///
+    /// assert!(Index::new(1).is_ok());
+    /// assert!(Index::new(0).is_err());
+    /// ```
     pub fn new(index: u16) -> Result<Self> {
         track_assert_ne!(index, 0, Failed);
         Ok(Index(index))
     }
+
+    /// Returns the `Index` instance which has the starting index of the dynamic table.
+    ///
+    /// See: [2.3.3.  Index Address Space](https://tools.ietf.org/html/rfc7541#section-2.3.3)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hpack_codec::table::Index;
+    ///
+    /// assert_eq!(Index::dynamic_table_offset().as_u16(), 62);
+    /// assert_eq!(Index::dynamic_table_offset() + 8, Index::new(70).unwrap());
+    /// ```
     pub fn dynamic_table_offset() -> Self {
         Index(StaticEntry::entries_count() as u16 + 1)
     }
+
+    /// Returns the value of this index.
     pub fn as_u16(&self) -> u16 {
         self.0
     }
@@ -300,18 +374,26 @@ impl From<StaticEntry> for HeaderField<'static> {
     }
 }
 
+/// A list specifying the entries of the static table.
+///
+/// See: [Appendix A.  Static Table Definition)(https://tools.ietf.org/html/rfc7541#appendix-A)
 #[derive(Debug, Clone, Copy)]
+#[allow(missing_docs)]
 pub enum StaticEntry {
     Authority,
+    /// This is an alias of `MethodGet`.
     Method,
     MethodGet,
     MethodPost,
+    /// This is an alias of `PathRoot`.
     Path,
     PathRoot,
     PathIndexHtml,
+    /// This is an alias of `SchemeHttp`.
     Scheme,
     SchemeHttp,
     SchemeHttps,
+    /// This is an alias of `Status200`.
     Status,
     Status200,
     Status204,
@@ -321,6 +403,7 @@ pub enum StaticEntry {
     Status404,
     Status500,
     AcceptCharset,
+    /// This is an alias of `AcceptEncodingGzipDeflate`.
     AcceptEncoding,
     AcceptEncodingGzipDeflate,
     AcceptLanguage,
@@ -370,9 +453,23 @@ pub enum StaticEntry {
     WwwAuthenticate,
 }
 impl StaticEntry {
+    /// Returns the entries count of the static table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hpack_codec::table::StaticEntry;
+    ///
+    /// assert_eq!(StaticEntry::entries_count(), 61);
+    /// ```
     pub fn entries_count() -> usize {
         61
     }
+
+    /// Makes a new `StaticEntry` instance associated with the specified index.
+    ///
+    /// If the value of `index` is greater than `StaticEntry::entries_count()`,
+    /// this function will return `None`.
     pub fn from_index(index: Index) -> Option<Self> {
         Some(match index.as_u16() {
             1 => StaticEntry::Authority,
