@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::io::Write;
 
 use Result;
@@ -6,21 +5,27 @@ use field::{RawHeaderField, FieldName, LiteralFieldForm};
 use signal::DynamicTableSizeUpdate;
 use table::Table;
 
+/// HPACK Encoder.
 #[derive(Debug)]
 pub struct Encoder {
     table: Table,
     dynamic_table_size_updates: Vec<u16>,
 }
 impl Encoder {
+    /// Makes a new `Encoder` instance.
     pub fn new(max_dynamic_table_size: u16) -> Self {
         Encoder {
             table: Table::new(max_dynamic_table_size),
             dynamic_table_size_updates: Vec::new(),
         }
     }
+
+    /// Returns the indexing table of this decoder.
     pub fn table(&self) -> &Table {
         &self.table
     }
+
+    /// Sets the hard limit of the dynamic table size of this encoder.
     pub fn set_dynamic_table_size_hard_limit(&mut self, max_size: u16) {
         let old = self.table.dynamic().size_soft_limit();
         self.table.dynamic_mut().set_size_hard_limit(max_size);
@@ -28,6 +33,12 @@ impl Encoder {
             self.dynamic_table_size_updates.push(old);
         }
     }
+
+    /// Sets the soft limit of the dynamic table size of this encoder.
+    ///
+    /// # Errors
+    ///
+    /// If `max_size` exceeds the hard limit of this, an error will be returned.
     pub fn set_dynamic_table_size_soft_limit(&mut self, max_size: u16) -> Result<()> {
         let old = self.table.dynamic().size_soft_limit();
         track!(self.table.dynamic_mut().set_size_soft_limit(max_size))?;
@@ -36,27 +47,28 @@ impl Encoder {
         }
         Ok(())
     }
-    pub fn enter_header_block<W: Write>(&mut self, mut writer: W) -> Result<HeaderBlockEncoder<W>> {
+
+    /// Returns a `HeaderBlockEncoder` instance for encoding header fields to the `block`.
+    pub fn enter_header_block<W: Write>(&mut self, mut block: W) -> Result<HeaderBlockEncoder<W>> {
         for max_size in self.dynamic_table_size_updates.drain(..) {
             let update = DynamicTableSizeUpdate { max_size };
-            track!(update.encode(&mut writer))?;
+            track!(update.encode(&mut block))?;
         }
         Ok(HeaderBlockEncoder {
             table: &mut self.table,
-            writer,
+            block,
         })
     }
 }
 
+/// Header Block Encoder.
 #[derive(Debug)]
 pub struct HeaderBlockEncoder<'a, W> {
     table: &'a mut Table,
-    writer: W,
+    block: W,
 }
 impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
-    pub fn table(&self) -> &Table {
-        &self.table
-    }
+    /// Encodes a header field.
     pub fn encode_field<'b, F>(&'b mut self, field: F) -> Result<()>
     where
         F: Into<RawHeaderField<'b>>,
@@ -83,10 +95,17 @@ impl<'a, W: Write> HeaderBlockEncoder<'a, W> {
                 }
             }
         }
-        track!(field.encode(&mut self.writer))?;
+        track!(field.encode(&mut self.block))?;
         Ok(())
     }
+
+    /// Finishes the encoding for the header block.
     pub fn finish(self) -> W {
-        self.writer
+        self.block
+    }
+
+    /// Returns the indexing table of this decoder.
+    pub fn table(&self) -> &Table {
+        &self.table
     }
 }
