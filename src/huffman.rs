@@ -41,9 +41,9 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
         next_bits = cmp::min(next_bits, reader.remaining_bits());
         value = (value << next_bits) + track!(reader.read_bits(next_bits))?;
         acc_bits += next_bits;
-        if let Ok(i) = TABLE.binary_search_by_key(&(value, acc_bits), |e| (e.0, e.1)) {
+        if let Ok(i) = DECODING_TABLE.binary_search_by_key(&(value, acc_bits), |e| (e.0, e.1)) {
             track_assert_ne!(i, 256, Failed);
-            buf.push(TABLE[i].2 as u8);
+            buf.push(DECODING_TABLE[i].2 as u8);
             next_bits = 5;
             acc_bits = 0;
             value = 0;
@@ -86,10 +86,10 @@ impl BitWriter {
 }
 
 pub fn encode(data: &[u8]) -> Vec<u8> {
-    // TODO: optimize
+    // FIXME: optimize
     let mut writer = BitWriter::new();
     for b in data.iter() {
-        let (code, bitwidth) = TABLE2[*b as usize];
+        let (code, bitwidth) = ENCODING_TABLE[*b as usize];
         for i in 0..bitwidth {
             let bit = (code >> (bitwidth - i - 1)) & 0b1;
             writer.write_bit(bit as u8);
@@ -98,7 +98,7 @@ pub fn encode(data: &[u8]) -> Vec<u8> {
     writer.finish()
 }
 
-const TABLE: [(u32, usize, u16); 257] = [
+const DECODING_TABLE: [(u32, usize, u16); 257] = [
     (0b0000_0, 5, 48),
     (0b0000_1, 5, 49),
     (0b0001_0, 5, 50),
@@ -358,7 +358,7 @@ const TABLE: [(u32, usize, u16); 257] = [
     (0b1111_1111_1111_1111_1111_1111_1111_11, 30, 256),
 ];
 
-const TABLE2: [(u32, u8); 257] = [
+const ENCODING_TABLE: [(u32, u8); 257] = [
     (0b1111_1111_1100_0, 13),
     (0b1111_1111_1111_1111_1011_000, 23),
     (0b1111_1111_1111_1111_1111_1110_0010, 28),
