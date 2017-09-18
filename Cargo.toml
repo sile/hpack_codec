@@ -6,7 +6,7 @@ description = "Encoder and Decoder for HPACK (RFC 7541)"
 homepage = "https://github.com/sile/hpack_codec"
 repository = "https://github.com/sile/hpack_codec"
 readme = "README.md"
-keywords = ["http/2", "hpack"]
+keywords = ["http2", "hpack"]
 categories = ["compression", "encoding"]
 license = "MIT"
 
