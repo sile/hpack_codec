@@ -143,7 +143,8 @@ impl IndexedHeaderField {
         track!(literal::encode_u16(writer, 1, 7, self.0.as_u16()))
     }
     fn decode(reader: &mut SliceReader) -> Result<Self> {
-        let index = Index::new(track!(literal::decode_u16(reader, 7))?.1).expect("TODO");
+        let index = track!(literal::decode_u16(reader, 7))?.1;
+        let index = track!(Index::new(index))?;
         Ok(IndexedHeaderField(index))
     }
 }
@@ -271,7 +272,8 @@ impl<'a> LiteralHeaderField<'a> {
                 FieldName::Name(name)
             } else {
                 let index = track!(literal::decode_u16(&mut reader, 6))?.1;
-                FieldName::Index(Index::new(index).expect("TODO"))
+                let index = track!(Index::new(index))?;
+                FieldName::Index(index)
             };
             Ok((name, LiteralFieldForm::WithIndexing))
         } else if first_octet == 0b0001_0000 {
@@ -281,7 +283,8 @@ impl<'a> LiteralHeaderField<'a> {
                 FieldName::Name(name)
             } else {
                 let index = track!(literal::decode_u16(&mut reader, 4))?.1;
-                FieldName::Index(Index::new(index).expect("TODO"))
+                let index = track!(Index::new(index))?;
+                FieldName::Index(index)
             };
             Ok((name, LiteralFieldForm::NeverIndexed))
         } else {
@@ -291,7 +294,8 @@ impl<'a> LiteralHeaderField<'a> {
                 FieldName::Name(name)
             } else {
                 let index = track!(literal::decode_u16(&mut reader, 4))?.1;
-                FieldName::Index(Index::new(index).expect("TODO"))
+                let index = track!(Index::new(index))?;
+                FieldName::Index(index)
             };
             Ok((name, LiteralFieldForm::WithoutIndexing))
         }
