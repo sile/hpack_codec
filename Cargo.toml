@@ -2,6 +2,17 @@
 name = "hpack_codec"
 version = "0.1.0"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
+description = "Encoder and Decoder for HPACK (RFC 7541)"
+homepage = "https://github.com/sile/hpack_codec"
+repository = "https://github.com/sile/hpack_codec"
+readme = "README.md"
+keywords = ["http/2", "hpack"]
+categories = ["compression", "encoding"]
+license = "MIT"
+
+[badges]
+travis-ci = {repository = "sile/hpack_codec"}
+codecov = {repository = "sile/hpack_codec"}
 
 [dependencies]
 byteorder = "1"
