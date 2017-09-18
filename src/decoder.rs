@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use trackable::error::Failed;
 
 use Result;
@@ -8,17 +7,29 @@ use io::SliceReader;
 use signal::DynamicTableSizeUpdate;
 use table::Table;
 
+/// HPACK Decoder.
 #[derive(Debug)]
 pub struct Decoder {
     table: Table,
 }
 impl Decoder {
-    pub fn table(&self) -> &Table {
-        &self.table
-    }
+    /// Makes a new `Decoder` instance.
     pub fn new(max_dynamic_table_size: u16) -> Self {
         Decoder { table: Table::new(max_dynamic_table_size) }
     }
+
+    /// Returns the indexing table of this decoder.
+    pub fn table(&self) -> &Table {
+        &self.table
+    }
+
+    /// Sets the hard limit of the dynamic table size of this decoder.
+    ///
+    /// # Errors
+    ///
+    /// If the value of `max_size` is greater than the soft limit of this decoder
+    /// (i.e., the value of `self.table().dynamic().size_soft_limit()`),
+    /// an error will be returned.
     pub fn set_dynamic_table_size_hard_limit(&mut self, max_size: u16) -> Result<()> {
         track_assert!(
             self.table.dynamic().size_soft_limit() <= max_size,
@@ -31,6 +42,8 @@ impl Decoder {
         self.table.dynamic_mut().set_size_hard_limit(max_size);
         Ok(())
     }
+
+    /// Returns a `HeaderBlockDecoder` instance for decoding the header block `block`.
     pub fn enter_header_block<'a, 'b>(
         &'a mut self,
         block: &'b [u8],
@@ -49,19 +62,16 @@ impl Decoder {
     }
 }
 
+/// Header Block Decoder.
 #[derive(Debug)]
 pub struct HeaderBlockDecoder<'a, 'b> {
     table: &'a mut Table,
     reader: SliceReader<'b>,
 }
 impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
-    pub fn decode_raw_field(&mut self) -> Result<Option<RawHeaderField<'b>>> {
-        if self.reader.eos() {
-            Ok(None)
-        } else {
-            track!(RawHeaderField::decode(&mut self.reader)).map(Some)
-        }
-    }
+    /// Decodes a header field.
+    ///
+    /// If it reached the end of this block, `Ok(None)` will be returned.
     pub fn decode_field<'c>(&'c mut self) -> Result<Option<HeaderField<'c>>> {
         if let Some(field) = track!(self.decode_raw_field())? {
             let result = match field {
@@ -74,10 +84,24 @@ impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
         }
     }
 
-    // TODO
-    pub fn eos(&self) -> bool {
-        self.reader.eos()
+    /// Decodes a header field and returns the raw representation of it.
+    ///
+    /// This method may be useful for intermediaries
+    /// (see: [6.2.3.  Literal Header Field Never Indexed]
+    ///  (https://tools.ietf.org/html/rfc7541#section-6.2.3)).
+    pub fn decode_raw_field(&mut self) -> Result<Option<RawHeaderField<'b>>> {
+        if self.reader.eos() {
+            Ok(None)
+        } else {
+            track!(RawHeaderField::decode(&mut self.reader)).map(Some)
+        }
     }
+
+    /// Returns the indexing table of this decoder.
+    pub fn table(&self) -> &Table {
+        &self.table
+    }
+
     fn handle_indexed_field(
         table: &'a mut Table,
         field: IndexedHeaderField,
@@ -126,6 +150,12 @@ mod test {
             }
         }
     }
+    macro_rules! assert_eob {
+        ($decoder:expr) => {
+            let field = track_try_unwrap!($decoder.decode_field());
+            assert!(field.is_none());
+        }
+    }
 
     #[test]
     /// https://tools.ietf.org/html/rfc7541#appendix-C.2.1
@@ -143,7 +173,7 @@ mod test {
             }
             let mut block = track_try_unwrap!(decoder.enter_header_block(&data[..]));
             assert_decode!(block, b"custom-key", b"custom-header");
-            assert!(block.eos());
+            assert_eob!(block);
         }
         assert_eq!(decoder.table.dynamic().entries().len(), 1);
         assert_eq!(decoder.table.dynamic().size(), 55);
@@ -169,7 +199,7 @@ mod test {
             }
             let mut block = track_try_unwrap!(decoder.enter_header_block(&data[..]));
             assert_decode!(block, b":path", b"/sample/path");
-            assert!(block.eos());
+            assert_eob!(block);
         }
         assert_eq!(decoder.table.dynamic().entries().len(), 0);
     }
@@ -189,7 +219,7 @@ mod test {
             }
             let mut block = track_try_unwrap!(decoder.enter_header_block(&data[..]));
             assert_decode!(block, b"password", b"secret");
-            assert!(block.eos());
+            assert_eob!(block);
         }
         assert_eq!(decoder.table.dynamic().entries().len(), 0);
     }
@@ -202,7 +232,7 @@ mod test {
             let data = [0x82];
             let mut block = track_try_unwrap!(decoder.enter_header_block(&data[..]));
             assert_decode!(block, b":method", b"GET");
-            assert!(block.eos());
+            assert_eob!(block);
         }
         assert!(decoder.table.dynamic().entries().is_empty());
     }

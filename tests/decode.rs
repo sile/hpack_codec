@@ -13,6 +13,12 @@ macro_rules! assert_decode {
         }
     }
 }
+macro_rules! assert_eob {
+    ($decoder:expr) => {
+        let field = track_try_unwrap!($decoder.decode_field());
+        assert!(field.is_none());
+    }
+}
 
 #[test]
 /// https://tools.ietf.org/html/rfc7541#appendix-C.3
@@ -34,7 +40,7 @@ fn request_examples_without_huffman_coding() {
         assert_decode!(block, b":scheme", b"http");
         assert_decode!(block, b":path", b"/");
         assert_decode!(block, b":authority", b"www.example.com");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 57);
 
@@ -54,7 +60,7 @@ fn request_examples_without_huffman_coding() {
         assert_decode!(block, b":path", b"/");
         assert_decode!(block, b":authority", b"www.example.com");
         assert_decode!(block, b"cache-control", b"no-cache");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 110);
 
@@ -75,7 +81,7 @@ fn request_examples_without_huffman_coding() {
         assert_decode!(block, b":path", b"/index.html");
         assert_decode!(block, b":authority", b"www.example.com");
         assert_decode!(block, b"custom-key", b"custom-value");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 164);
 }
@@ -100,7 +106,7 @@ fn request_examples_with_huffman_coding() {
         assert_decode!(block, b":scheme", b"http");
         assert_decode!(block, b":path", b"/");
         assert_decode!(block, b":authority", b"www.example.com");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 57);
 
@@ -119,7 +125,7 @@ fn request_examples_with_huffman_coding() {
         assert_decode!(block, b":path", b"/");
         assert_decode!(block, b":authority", b"www.example.com");
         assert_decode!(block, b"cache-control", b"no-cache");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 110);
 
@@ -140,7 +146,7 @@ fn request_examples_with_huffman_coding() {
         assert_decode!(block, b":path", b"/index.html");
         assert_decode!(block, b":authority", b"www.example.com");
         assert_decode!(block, b"custom-key", b"custom-value");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 164);
 }
@@ -170,7 +176,7 @@ fn response_examples_without_huffman_coding() {
         assert_decode!(block, b"cache-control", b"private");
         assert_decode!(block, b"date", b"Mon, 21 Oct 2013 20:13:21 GMT");
         assert_decode!(block, b"location", b"https://www.example.com");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 222);
 
@@ -188,7 +194,7 @@ fn response_examples_without_huffman_coding() {
         assert_decode!(block, b"cache-control", b"private");
         assert_decode!(block, b"date", b"Mon, 21 Oct 2013 20:13:21 GMT");
         assert_decode!(block, b"location", b"https://www.example.com");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 222);
 
@@ -224,7 +230,7 @@ fn response_examples_without_huffman_coding() {
             b"set-cookie",
             &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..]
         );
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 215);
 }
@@ -252,7 +258,7 @@ fn response_examples_with_huffman_coding() {
         assert_decode!(block, b"cache-control", b"private");
         assert_decode!(block, b"date", b"Mon, 21 Oct 2013 20:13:21 GMT");
         assert_decode!(block, b"location", b"https://www.example.com");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 222);
 
@@ -270,7 +276,7 @@ fn response_examples_with_huffman_coding() {
         assert_decode!(block, b"cache-control", b"private");
         assert_decode!(block, b"date", b"Mon, 21 Oct 2013 20:13:21 GMT");
         assert_decode!(block, b"location", b"https://www.example.com");
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 222);
 
@@ -301,7 +307,7 @@ fn response_examples_with_huffman_coding() {
             b"set-cookie",
             &b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..]
         );
-        assert!(block.eos());
+        assert_eob!(block);
     }
     assert_eq!(decoder.table().dynamic().size(), 215);
 }

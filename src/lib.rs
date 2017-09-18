@@ -6,15 +6,15 @@
 //!
 //! ```
 //! use hpack_codec::{Encoder, Decoder};
-//! use hpack_codec::field::{HeaderField, LiteralHeaderField};
+//! use hpack_codec::field::{HeaderField, LiteralHeaderField as Field};
 //! use hpack_codec::table::{StaticEntry, Index};
 //!
 //! // Encoding
 //! let mut encoder = Encoder::new(4096);
 //! let mut header = encoder.enter_header_block(Vec::new()).unwrap();
 //! header.encode_field(StaticEntry::MethodGet).unwrap();
-//! header.encode_field(LiteralHeaderField::with_indexed_name(StaticEntry::Path, b"/hello")).unwrap();
-//! header.encode_field(LiteralHeaderField::new(b"foo", b"bar").with_indexing()).unwrap();
+//! header.encode_field(Field::with_indexed_name(StaticEntry::Path, b"/hello")).unwrap();
+//! header.encode_field(Field::new(b"foo", b"bar").with_indexing()).unwrap();
 //! header.encode_field(Index::dynamic_table_offset() + 0).unwrap();
 //! let encoded_data = header.finish();
 //!
