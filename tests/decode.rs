@@ -5,19 +5,17 @@ extern crate trackable;
 use hpack_codec::Decoder;
 
 macro_rules! assert_decode {
-    ($decoder:expr, $key:expr, $value:expr) => {
-        {
-            let field = track_try_unwrap!($decoder.decode_field()).unwrap();
-            assert_eq!(field.name(), $key);
-            assert_eq!(field.value(), $value);
-        }
-    }
+    ($decoder:expr, $key:expr, $value:expr) => {{
+        let field = track_try_unwrap!($decoder.decode_field()).unwrap();
+        assert_eq!(field.name(), $key);
+        assert_eq!(field.value(), $value);
+    }};
 }
 macro_rules! assert_eob {
     ($decoder:expr) => {
         let field = track_try_unwrap!($decoder.decode_field());
         assert!(field.is_none());
-    }
+    };
 }
 
 #[test]
