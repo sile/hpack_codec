@@ -1,7 +1,6 @@
+use crate::Result;
 use std::cmp;
 use trackable::error::Failed;
-
-use Result;
 
 #[derive(Debug)]
 pub struct BitReader<'a> {

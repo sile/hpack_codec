@@ -1,9 +1,8 @@
+use crate::Result;
+use byteorder::ReadBytesExt;
 use std::cmp;
 use std::io::{Read, Result as IoResult};
-use byteorder::ReadBytesExt;
 use trackable::error::Failed;
-
-use Result;
 
 #[derive(Debug)]
 pub struct SliceReader<'a> {

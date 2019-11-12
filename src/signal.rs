@@ -1,8 +1,7 @@
+use crate::io::SliceReader;
+use crate::literal;
+use crate::Result;
 use std::io::Write;
-
-use Result;
-use io::SliceReader;
-use literal;
 
 #[derive(Debug)]
 pub struct DynamicTableSizeUpdate {

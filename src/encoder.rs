@@ -1,9 +1,8 @@
+use crate::field::{FieldName, LiteralFieldForm, RawHeaderField};
+use crate::signal::DynamicTableSizeUpdate;
+use crate::table::Table;
+use crate::Result;
 use std::io::Write;
-
-use Result;
-use field::{RawHeaderField, FieldName, LiteralFieldForm};
-use signal::DynamicTableSizeUpdate;
-use table::Table;
 
 /// HPACK Encoder.
 #[derive(Debug)]

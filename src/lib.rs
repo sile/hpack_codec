@@ -27,17 +27,16 @@
 //! assert_eq!(header.decode_field().unwrap(), HeaderField::new(b"foo", b"bar").ok());
 //! ```
 #![warn(missing_docs)]
-extern crate byteorder;
 #[macro_use]
 extern crate trackable;
 
 macro_rules! track_io {
     ($e:expr) => {
         $e.map_err(|e| {
-            use ::trackable::error::{Failed,ErrorKindExt};
+            use trackable::error::{ErrorKindExt, Failed};
             Failed.cause(e)
         })
-    }
+    };
 }
 
 pub use decoder::{Decoder, HeaderBlockDecoder};
@@ -57,4 +56,4 @@ mod signal;
 pub type Error = trackable::error::TrackableError<trackable::error::Failed>;
 
 /// This crate specific `Result` type.
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;

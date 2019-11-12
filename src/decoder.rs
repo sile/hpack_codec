@@ -1,11 +1,12 @@
+use crate::field::{
+    FieldName, HeaderField, IndexedHeaderField, LiteralFieldForm, LiteralHeaderField,
+    RawHeaderField,
+};
+use crate::io::SliceReader;
+use crate::signal::DynamicTableSizeUpdate;
+use crate::table::Table;
+use crate::Result;
 use trackable::error::Failed;
-
-use Result;
-use field::{RawHeaderField, HeaderField, IndexedHeaderField, LiteralHeaderField, LiteralFieldForm,
-            FieldName};
-use io::SliceReader;
-use signal::DynamicTableSizeUpdate;
-use table::Table;
 
 /// HPACK Decoder.
 #[derive(Debug)]
@@ -15,7 +16,9 @@ pub struct Decoder {
 impl Decoder {
     /// Makes a new `Decoder` instance.
     pub fn new(max_dynamic_table_size: u16) -> Self {
-        Decoder { table: Table::new(max_dynamic_table_size) }
+        Decoder {
+            table: Table::new(max_dynamic_table_size),
+        }
     }
 
     /// Returns the indexing table of this decoder.
@@ -51,9 +54,10 @@ impl Decoder {
         let mut reader = SliceReader::new(block);
         while (track!(reader.peek_u8())? & 0b0010_0000) != 0 {
             let update = track!(DynamicTableSizeUpdate::decode(&mut reader))?;
-            track!(self.table.dynamic_mut().set_size_soft_limit(
-                update.max_size,
-            ))?;
+            track!(self
+                .table
+                .dynamic_mut()
+                .set_size_soft_limit(update.max_size,))?;
         }
         Ok(HeaderBlockDecoder {
             table: &mut self.table,
@@ -72,7 +76,7 @@ impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
     /// Decodes a header field.
     ///
     /// If it reached the end of this block, `Ok(None)` will be returned.
-    pub fn decode_field<'c>(&'c mut self) -> Result<Option<HeaderField<'c>>> {
+    pub fn decode_field(&mut self) -> Result<Option<HeaderField>> {
         if let Some(field) = track!(self.decode_raw_field())? {
             let result = match field {
                 RawHeaderField::Indexed(f) => track!(Self::handle_indexed_field(self.table, f)),
@@ -102,16 +106,16 @@ impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
         &self.table
     }
 
-    fn handle_indexed_field(
-        table: &'a mut Table,
-        field: IndexedHeaderField,
-    ) -> Result<HeaderField<'a>> {
+    fn handle_indexed_field(table: &mut Table, field: IndexedHeaderField) -> Result<HeaderField> {
         track!(table.get(field.index()))
     }
-    fn handle_literal_field(
-        table: &'a mut Table,
+    fn handle_literal_field<'c>(
+        table: &'c mut Table,
         field: LiteralHeaderField<'b>,
-    ) -> Result<HeaderField<'a>> {
+    ) -> Result<HeaderField<'c>>
+    where
+        'b: 'c,
+    {
         let (name, value, form) = field.unwrap();
         if let LiteralFieldForm::WithIndexing = form {
             let name = match name {
@@ -138,23 +142,21 @@ impl<'a, 'b: 'a> HeaderBlockDecoder<'a, 'b> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     macro_rules! assert_decode {
-        ($decoder:expr, $key:expr, $value:expr) => {
-            {
-                let field = track_try_unwrap!($decoder.decode_field()).unwrap();
-                assert_eq!(field.name(), $key);
-                assert_eq!(field.value(), $value);
-            }
-        }
+        ($decoder:expr, $key:expr, $value:expr) => {{
+            let field = track_try_unwrap!($decoder.decode_field()).unwrap();
+            assert_eq!(field.name(), $key);
+            assert_eq!(field.value(), $value);
+        }};
     }
     macro_rules! assert_eob {
         ($decoder:expr) => {
             let field = track_try_unwrap!($decoder.decode_field());
             assert!(field.is_none());
-        }
+        };
     }
 
     #[test]

@@ -1,13 +1,12 @@
 //! Literal types.
+use crate::huffman;
+use crate::io::SliceReader;
+use crate::Result;
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::u16;
-use byteorder::{WriteBytesExt, ReadBytesExt};
 use trackable::error::Failed;
-
-use Result;
-use huffman;
-use io::SliceReader;
 
 pub(crate) fn encode_u16<W: Write>(
     mut writer: W,
@@ -106,7 +105,7 @@ impl<'a> HpackString<'a> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]

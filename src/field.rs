@@ -1,15 +1,14 @@
 //! Header Field.
+use crate::huffman;
+use crate::io::SliceReader;
+use crate::literal::{self, HpackString};
+use crate::table::{Index, StaticEntry};
+use crate::Result;
+use byteorder::WriteBytesExt;
 use std;
 use std::borrow::Cow;
 use std::io::Write;
-use byteorder::WriteBytesExt;
 use trackable::error::Failed;
-
-use Result;
-use huffman;
-use io::SliceReader;
-use literal::{self, HpackString};
-use table::{Index, StaticEntry};
 
 /// Header Field.
 ///
@@ -101,9 +100,7 @@ impl<'a> RawHeaderField<'a> {
                 "Dynamic table size update MUST occur at the beginning of the first header block"
             );
         } else {
-            track!(LiteralHeaderField::decode(reader, octet).map(
-                RawHeaderField::Literal,
-            ))
+            track!(LiteralHeaderField::decode(reader, octet).map(RawHeaderField::Literal,))
         }
     }
 }

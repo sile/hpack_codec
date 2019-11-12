@@ -1,13 +1,12 @@
 //! Header Field Table.
 //!
 //! See: [2.3.  Indexing Tables](https://tools.ietf.org/html/rfc7541#section-2.3)
+use crate::field::HeaderField;
+use crate::Result;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ops::{Add, AddAssign};
 use trackable::error::Failed;
-
-use Result;
-use field::HeaderField;
 
 /// Table for associating header fields to indexes.
 ///
@@ -19,7 +18,9 @@ pub struct Table {
 impl Table {
     /// Makes a new `Table` instance.
     pub fn new(max_dynamic_table_size: u16) -> Self {
-        Table { dynamic_table: DynamicTable::new(max_dynamic_table_size) }
+        Table {
+            dynamic_table: DynamicTable::new(max_dynamic_table_size),
+        }
     }
 
     /// Returns the reference to `DynamicTable` instance.
@@ -225,7 +226,7 @@ impl From<StaticEntry> for Index {
     fn from(f: StaticEntry) -> Self {
         Index(match f {
             StaticEntry::Authority => 1,
-            StaticEntry::Method => 2, 
+            StaticEntry::Method => 2,
             StaticEntry::MethodGet => 2,
             StaticEntry::MethodPost => 3,
             StaticEntry::Path => 4,
@@ -301,7 +302,7 @@ impl From<StaticEntry> for HeaderField<'static> {
             };
             ($name:expr) => {
                 HeaderField::from_cow(Cow::Borrowed($name), Cow::Borrowed(b""))
-            }
+            };
         }
         match f {
             StaticEntry::Authority => field!(b":authority"),
