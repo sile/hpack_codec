@@ -1,7 +1,7 @@
 hpack_codec
 ===========
 
-[![Crates.io: hpack_codec](http://meritbadge.herokuapp.com/hpack_codec)](https://crates.io/crates/hpack_codec)
+[![hpack_codec](https://img.shields.io/crates/v/hpack_codec.svg)](https://crates.io/crates/hpack_codec)
 [![Documentation](https://docs.rs/hpack_codec/badge.svg)](https://docs.rs/hpack_codec)
 [![Build Status](https://travis-ci.org/sile/hpack_codec.svg?branch=master)](https://travis-ci.org/sile/hpack_codec)
 [![Code Coverage](https://codecov.io/gh/sile/hpack_codec/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/hpack_codec/branch/master)
